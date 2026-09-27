@@ -63,13 +63,16 @@ class GameServiceTest {
     }
 
     @Test @Order(12)
-    void join_reconnect() {
+    void join_sameNumberFromAnotherDevice_bindsToSamePlayer() {
         String oldToken = participant.getToken();
         JoinResponse jr = gameService.join("Alice Updated", "55555", null);
         assertTrue(jr.success());
-        assertNotEquals(oldToken, jr.token());
-        assertEquals("Alice Updated", jr.name());
+        // both devices keep working: the existing token is handed out again
+        assertEquals(oldToken, jr.token());
+        // the original name is kept (a second device cannot rename the player)
+        assertEquals("Alice GS", jr.name());
         participant = participantRepo.findByToken(jr.token()).orElseThrow();
+        assertEquals(1, participant.getRejoinCount());
     }
 
     @Test @Order(13)
@@ -79,6 +82,8 @@ class GameServiceTest {
         assertThrows(IllegalStateException.class, () ->
             gameService.join("X", "99999", null)
         );
+        // an already registered student (e.g. phone died) can still get back in
+        assertTrue(gameService.join("Alice GS", "55555", null).success());
         adminService.updateSettings(sessionId, Map.of("joinOpen", "true"));
     }
 
@@ -188,11 +193,10 @@ class GameServiceTest {
     // ── Board data ────────────────────────────────────
 
     @Test @Order(70)
-    void getBoardData() {
-        BoardData bd = gameService.getBoardData(sessionId);
-        assertNotNull(bd);
-        assertNotNull(bd.session());
-        assertTrue(bd.participantCount() > 0);
+    void getBoardPayload() {
+        Map<String, Object> bd = gameService.getBoardPayload();
+        assertEquals(true, bd.get("hasSession"));
+        assertTrue(((Number) bd.get("participantCount")).longValue() > 0);
     }
 
     // ── Analytics ─────────────────────────────────────

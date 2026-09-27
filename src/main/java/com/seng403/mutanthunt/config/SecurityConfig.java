@@ -5,12 +5,12 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.annotation.Order;
-import org.springframework.security.authentication.event.AuthenticationFailureBadCredentialsEvent;
-import org.springframework.security.authentication.event.AuthenticationSuccessEvent;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.userdetails.User;
@@ -19,9 +19,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.authentication.WebAuthenticationDetails;
-import org.springframework.context.event.EventListener;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -30,6 +32,9 @@ import java.io.IOException;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
+    static final String DEFAULT_PASSWORD = "changeme";
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -40,6 +45,12 @@ public class SecurityConfig {
     public UserDetailsService userDetailsService(
             @Value("${app.admin-password}") String adminPassword,
             PasswordEncoder encoder) {
+        if (DEFAULT_PASSWORD.equals(adminPassword)) {
+            log.warn("**************************************************************");
+            log.warn("* ADMIN_PASSWORD is not set – using the default 'changeme'.  *");
+            log.warn("* Set ADMIN_PASSWORD before exposing the app via a tunnel!   *");
+            log.warn("**************************************************************");
+        }
         var admin = User.withUsername("admin")
             .password(encoder.encode(adminPassword))
             .roles("ADMIN")
@@ -49,11 +60,16 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
-                                            LoginRateLimitFilter loginRateLimitFilter) throws Exception {
+                                           LoginRateLimitFilter loginRateLimitFilter,
+                                           RateLimitService rateLimitService) throws Exception {
+        var adminApi = new OrRequestMatcher(
+            new AntPathRequestMatcher("/admin/api/**"), new AntPathRequestMatcher("/sse/admin"));
+        var apiEntryPoint = new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED);
+        var loginEntryPoint = new LoginUrlAuthenticationEntryPoint("/admin/login");
         http
             .addFilterBefore(loginRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/admin/login", "/admin/login/**").permitAll()
+                .requestMatchers("/admin/login").permitAll()
                 .requestMatchers("/admin/**").hasRole("ADMIN")
                 .requestMatchers("/sse/admin").hasRole("ADMIN")
                 .anyRequest().permitAll()
@@ -61,20 +77,48 @@ public class SecurityConfig {
             .formLogin(form -> form
                 .loginPage("/admin/login")
                 .loginProcessingUrl("/admin/login")
-                .defaultSuccessUrl("/admin", true)
-                .failureUrl("/admin/login?error")
+                .successHandler((req, res, auth) -> {
+                    rateLimitService.resetLoginFailures(ClientIp.of(req));
+                    res.sendRedirect(req.getContextPath() + "/admin");
+                })
+                .failureHandler((req, res, ex) -> {
+                    String ip = ClientIp.of(req);
+                    rateLimitService.recordLoginFailure(ip);
+                    log.warn("Failed admin login from {}", ip);
+                    res.sendRedirect(req.getContextPath() + "/admin/login?error");
+                })
                 .permitAll()
             )
             .logout(logout -> logout
-                .logoutUrl("/admin/logout")
+                .logoutUrl("/admin/logout")          // POST with CSRF token
                 .logoutSuccessUrl("/admin/login?logout")
                 .permitAll()
             )
-            .csrf(csrf -> csrf
-                .ignoringRequestMatchers("/api/**", "/sse/**")
-            );
+            // JSON/SSE calls from the admin page get 401 instead of an HTML login redirect
+            .exceptionHandling(ex -> ex.authenticationEntryPoint((req, res, e) -> {
+                if (adminApi.matches(req)) apiEntryPoint.commence(req, res, e);
+                else loginEntryPoint.commence(req, res, e);
+            }))
+            // student endpoints are cookie-token based and carry no admin authority;
+            // all admin forms and /admin/api calls require the CSRF token
+            .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/sse/**"));
 
         return http.build();
+    }
+
+    /**
+     * Client IP for brute-force protection. Behind Cloudflare the edge overwrites
+     * {@code CF-Connecting-IP}, whereas the first {@code X-Forwarded-For} entry can be
+     * forged by the client.
+     */
+    static final class ClientIp {
+        private ClientIp() {}
+
+        static String of(HttpServletRequest request) {
+            String cf = request.getHeader("CF-Connecting-IP");
+            if (cf != null && !cf.isBlank()) return cf.trim();
+            return request.getRemoteAddr();
+        }
     }
 
     @Component
@@ -90,42 +134,14 @@ public class SecurityConfig {
                                         HttpServletResponse response,
                                         FilterChain filterChain) throws ServletException, IOException {
             if ("/admin/login".equals(request.getServletPath()) && "POST".equals(request.getMethod())) {
-                String ip = getClientIp(request);
+                String ip = ClientIp.of(request);
                 if (rateLimitService.isLoginBlocked(ip)) {
-                    response.sendRedirect("/admin/login?blocked");
+                    long minutes = Math.max(1, (rateLimitService.getBlockRemainingSeconds(ip) + 59) / 60);
+                    response.sendRedirect(request.getContextPath() + "/admin/login?blocked=" + minutes);
                     return;
                 }
             }
             filterChain.doFilter(request, response);
-        }
-
-        private String getClientIp(HttpServletRequest request) {
-            String xff = request.getHeader("X-Forwarded-For");
-            if (xff != null && !xff.isBlank()) return xff.split(",")[0].trim();
-            return request.getRemoteAddr();
-        }
-    }
-
-    @Component
-    static class AuthEventListener {
-        private final RateLimitService rateLimitService;
-
-        AuthEventListener(RateLimitService rateLimitService) {
-            this.rateLimitService = rateLimitService;
-        }
-
-        @EventListener
-        public void onFailure(AuthenticationFailureBadCredentialsEvent event) {
-            if (event.getAuthentication().getDetails() instanceof WebAuthenticationDetails details) {
-                rateLimitService.recordLoginFailure(details.getRemoteAddress());
-            }
-        }
-
-        @EventListener
-        public void onSuccess(AuthenticationSuccessEvent event) {
-            if (event.getAuthentication().getDetails() instanceof WebAuthenticationDetails details) {
-                rateLimitService.resetLoginFailures(details.getRemoteAddress());
-            }
         }
     }
 }

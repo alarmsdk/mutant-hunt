@@ -201,7 +201,8 @@ class AdminApiControllerTest {
         mvc.perform(get("/admin/api/sessions/" + sessionId + "/participants")
                 .with(user("admin").roles("ADMIN")))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$").isArray());
+            .andExpect(jsonPath("$.rounds").isArray())
+            .andExpect(jsonPath("$.participants").isArray());
     }
 
     // ── Problems ──────────────────────────────────────
@@ -259,8 +260,9 @@ class AdminApiControllerTest {
 
     @Test @Order(30)
     void sessionsEndpoint_requiresAdmin() throws Exception {
+        // JSON endpoints answer 401 (not an HTML login redirect) so the admin page can react
         mvc.perform(get("/admin/api/sessions"))
-            .andExpect(status().is3xxRedirection());
+            .andExpect(status().isUnauthorized());
     }
 
     // ── Archive and delete ────────────────────────────

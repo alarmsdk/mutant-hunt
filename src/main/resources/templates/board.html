@@ -3,67 +3,77 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Mutant Hunt – Board</title>
+    <title th:text="#{board.title}">Mutant Hunt – Board</title>
     <link rel="stylesheet" th:href="@{/css/style.css}"/>
 </head>
 <body class="board-body">
-<div id="board">
+<div id="conn-banner" class="conn-banner" style="display:none" th:text="#{common.connection.lost}"></div>
+<div id="board" class="board">
 
-    <!-- QR Section -->
-    <div id="qr-section" class="board-panel">
-        <h1 class="board-title">🧬 Mutant Hunt</h1>
-        <div class="qr-container">
-            <img id="qr-img" th:src="@{/api/qr?size=400}" alt="QR Code" width="400" height="400"/>
-            <p class="join-url" id="join-url" th:text="${joinUrl}"></p>
-        </div>
-        <div class="board-info">
-            <span id="board-participants" class="board-stat">0 participants</span>
-        </div>
-    </div>
+    <!-- Join panel: QR + URL + participant count -->
+    <aside id="qr-section" class="board-qr">
+        <h1 class="board-title">🧬 <span th:text="#{board.title}">Mutant Hunt</span></h1>
+        <p class="board-scan" th:text="#{board.scan}">Scan to join</p>
+        <img id="qr-img" th:src="@{/api/qr(size=800)}" alt="QR code"/>
+        <p class="join-url" id="join-url" th:text="${joinUrl}"></p>
+        <p id="board-participants" class="board-stat-big"></p>
+    </aside>
 
-    <!-- Round Info -->
-    <div id="round-section" class="board-panel" style="display:none">
-        <div class="board-header">
-            <h2 id="round-name" class="board-round-name"></h2>
-            <div class="board-meta">
-                <span id="board-participant-count" class="board-stat"></span>
-                <span id="board-test-limit" class="board-stat"></span>
-                <span id="board-timer" class="board-stat timer" style="display:none"></span>
+    <!-- Round panel -->
+    <main id="round-section" class="board-main">
+        <div id="no-session" class="board-empty" style="display:none">
+            <h2 th:text="#{board.noSession}">No active session</h2>
+        </div>
+        <div id="no-round" class="board-empty" style="display:none">
+            <h2 id="session-name"></h2>
+            <p th:text="#{board.noRound}">Waiting for the first round…</p>
+        </div>
+
+        <div id="round-content" style="display:none">
+            <header class="board-header">
+                <h2 id="round-name" class="board-round-name"></h2>
+                <span id="round-status" class="board-status"></span>
+                <div class="board-meta">
+                    <span id="board-test-limit" class="board-stat"></span>
+                    <span id="board-participant-count" class="board-stat"></span>
+                    <span id="board-timer" class="board-stat timer" style="display:none"></span>
+                </div>
+            </header>
+
+            <div class="board-grid">
+                <section class="board-spec-wrap">
+                    <div id="board-spec" class="board-spec"></div>
+                    <div id="mutant-panel" class="board-mutants" style="display:none">
+                        <h3 th:text="#{board.mutants.title}">Mutants</h3>
+                        <div id="mutant-list"></div>
+                        <p id="mutant-note" class="muted small" style="display:none"
+                           th:text="#{board.mutants.detailsAfterReveal}"></p>
+                    </div>
+                </section>
+
+                <section class="board-scoreboard">
+                    <h3 th:text="#{board.scoreboard.title}">Scoreboard</h3>
+                    <table id="scoreboard-table">
+                        <thead>
+                        <tr>
+                            <th th:text="#{board.rank}">#</th>
+                            <th th:text="#{board.name}">Name</th>
+                            <th th:text="#{board.score}">Killed</th>
+                            <th th:text="#{board.tests}">Tests</th>
+                        </tr>
+                        </thead>
+                        <tbody id="scoreboard-body"></tbody>
+                    </table>
+                    <p id="scoreboard-empty" class="muted" style="display:none" th:text="#{board.scoreboard.empty}"></p>
+                    <div id="scoreboard-more" class="more-label" style="display:none"></div>
+                </section>
             </div>
         </div>
-
-        <!-- Spec -->
-        <div id="board-spec" class="board-spec"></div>
-
-        <!-- Scoreboard -->
-        <div class="board-scoreboard">
-            <h3>Scoreboard</h3>
-            <table id="scoreboard-table">
-                <thead>
-                    <tr><th>#</th><th>Name</th><th>Score</th><th>Tests</th></tr>
-                </thead>
-                <tbody id="scoreboard-body"></tbody>
-            </table>
-            <div id="scoreboard-more" class="more-label" style="display:none"></div>
-        </div>
-
-        <!-- Mutant Panel -->
-        <div id="mutant-panel" class="board-mutants" style="display:none">
-            <h3>Mutants</h3>
-            <div id="mutant-list"></div>
-        </div>
-    </div>
-
-    <!-- No-session message -->
-    <div id="no-session" class="board-panel text-center" style="display:none">
-        <h2>No active session</h2>
-    </div>
-
+    </main>
 </div>
 
-<script>
-    window.BOARD_DATA_URL = '/admin/api/board-data';
-</script>
+<script th:inline="javascript">window.MSG = /*[[${messages}]]*/ {};</script>
+<script th:src="@{/js/i18n.js}"></script>
 <script th:src="@{/js/board.js}"></script>
 </body>
 </html>

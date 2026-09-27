@@ -17,12 +17,15 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Load test: 80 virtual students join and each submit 10 tests.
- * Run manually: mvn test -Dgroups=load
+ * Load test: 80 virtual students join and each submit 10 tests while the board is
+ * connected via SSE. Verifies that the board's live scoreboard ends up complete and
+ * correct (80 entries, 7/7 each, 10 tests each).
+ * Run manually: mvn test -Pload
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -54,8 +57,33 @@ class LoadTest {
         adminService.openRound(round.getId());
     }
 
+    /** Latest "scoreboard" event received by the simulated board. */
+    private final AtomicReference<Map<String, Object>> lastBoardEvent = new AtomicReference<>();
+    private final AtomicInteger boardEvents = new AtomicInteger();
+
     @Test @Order(2)
     void loadTest80Students10Tests() throws Exception {
+        HttpClient boardClient = HttpClient.newHttpClient();
+        HttpRequest sseReq = HttpRequest.newBuilder(URI.create(base + "/sse/board"))
+            .header("Accept", "text/event-stream").build();
+        HttpResponse<java.util.stream.Stream<String>> sse =
+            boardClient.send(sseReq, HttpResponse.BodyHandlers.ofLines());
+        assertEquals(200, sse.statusCode());
+        assertEquals("no", sse.headers().firstValue("X-Accel-Buffering").orElse(null));
+        Thread boardReader = Thread.ofVirtual().start(() -> {
+            String event = null;
+            for (java.util.Iterator<String> it = sse.body().iterator(); it.hasNext(); ) {
+                String line = it.next();
+                if (line.startsWith("event:")) event = line.substring(6).trim();
+                else if (line.startsWith("data:") && "scoreboard".equals(event)) {
+                    try {
+                        lastBoardEvent.set(om.readValue(line.substring(5).trim(), new TypeReference<>() {}));
+                        boardEvents.incrementAndGet();
+                    } catch (Exception ignored) { }
+                }
+            }
+        });
+
         ExecutorService pool = Executors.newFixedThreadPool(20);
         AtomicInteger successfulSubmissions = new AtomicInteger(0);
         AtomicInteger failedSubmissions = new AtomicInteger(0);
@@ -136,7 +164,7 @@ class LoadTest {
                         HttpResponse<String> submitRes = studentClient.send(submitReq,
                             HttpResponse.BodyHandlers.ofString());
 
-                        if (submitRes.statusCode() == 200) {
+                        if (submitRes.statusCode() == 200 && submitRes.body().contains("\"success\":true")) {
                             successfulSubmissions.incrementAndGet();
                         } else {
                             failedSubmissions.incrementAndGet();
@@ -164,9 +192,31 @@ class LoadTest {
         System.out.println("Time: " + elapsed + "ms");
         System.out.println("Throughput: " + String.format("%.1f", total * 1000.0 / elapsed) + " submissions/sec");
 
-        assertTrue(joinedStudents.get() >= STUDENTS * 0.95,
-            "Most students should join: " + joinedStudents.get() + "/" + STUDENTS);
-        assertTrue(successfulSubmissions.get() >= total * 0.9,
-            "Too many failures: " + failedSubmissions.get() + "/" + total);
+        // the board must converge to the final state shortly after the last submission
+        long waitStart = System.currentTimeMillis();
+        List<Map<String, Object>> entries = List.of();
+        while (System.currentTimeMillis() - waitStart < 5000) {
+            Map<String, Object> ev = lastBoardEvent.get();
+            if (ev != null) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> e = (List<Map<String, Object>>) ev.get("entries");
+                entries = e;
+                if (entries.size() == STUDENTS && entries.stream().allMatch(x -> ((Number) x.get("testsUsed")).intValue() == TESTS_PER_STUDENT)) break;
+            }
+            Thread.sleep(100);
+        }
+        long convergeMs = System.currentTimeMillis() - waitStart;
+        boardReader.interrupt();
+        System.out.println("Board SSE scoreboard events: " + boardEvents.get()
+            + ", converged " + convergeMs + "ms after the last submission");
+
+        assertEquals(STUDENTS, entries.size(), "board scoreboard must list every student");
+        assertTrue(entries.stream().allMatch(x -> ((Number) x.get("score")).intValue() == 7),
+            "every student killed all 7 mutants");
+        assertTrue(entries.stream().allMatch(x -> ((Number) x.get("testsUsed")).intValue() == TESTS_PER_STUDENT));
+        assertFalse(entries.stream().anyMatch(x -> x.containsKey("participantId")), "no internal ids on the board");
+
+        assertEquals(STUDENTS, joinedStudents.get(), "every student should join");
+        assertEquals(total, successfulSubmissions.get(), "failed submissions: " + failedSubmissions.get());
     }
 }

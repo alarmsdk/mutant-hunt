@@ -36,7 +36,7 @@ public class SseService {
     }
 
     public SseEmitter registerStudent(Long participantId) {
-        SseEmitter emitter = new SseEmitter(TIMEOUT);
+        SseEmitter emitter = newEmitter();
         List<SseEmitter> list = studentEmitters.computeIfAbsent(participantId, k -> new CopyOnWriteArrayList<>());
         list.add(emitter);
         Runnable cleanup = () -> list.remove(emitter);
@@ -47,12 +47,26 @@ public class SseService {
     }
 
     private SseEmitter register(List<SseEmitter> list) {
-        SseEmitter emitter = new SseEmitter(TIMEOUT);
+        SseEmitter emitter = newEmitter();
         list.add(emitter);
         Runnable cleanup = () -> list.remove(emitter);
         emitter.onCompletion(cleanup);
         emitter.onTimeout(cleanup);
         emitter.onError(e -> cleanup.run());
+        return emitter;
+    }
+
+    /**
+     * Emits an initial event right away so that proxies (Cloudflare Tunnel) forward the
+     * response headers immediately instead of waiting for the first real update.
+     */
+    private SseEmitter newEmitter() {
+        SseEmitter emitter = new SseEmitter(TIMEOUT);
+        try {
+            emitter.send(SseEmitter.event().name("connected").data("{}").reconnectTime(3000));
+        } catch (IOException | IllegalStateException ignored) {
+            // client already gone; cleanup callbacks will remove it
+        }
         return emitter;
     }
 

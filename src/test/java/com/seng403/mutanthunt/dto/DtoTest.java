@@ -42,8 +42,9 @@ class DtoTest {
 
     @Test
     void playerStatus_waiting() {
-        PlayerStatus ps = PlayerStatus.waiting("Alice", 5);
+        PlayerStatus ps = PlayerStatus.waiting("Alice", "Blue Tiger #1", 5);
         assertEquals("Alice", ps.playerName());
+        assertEquals("Blue Tiger #1", ps.displayName());
         assertEquals("WAITING", ps.roundStatus());
         assertNull(ps.roundName());
         assertEquals(5, ps.participantCount());
@@ -53,11 +54,11 @@ class DtoTest {
     @Test
     void playerStatus_full() {
         PlayerStatus ps = new PlayerStatus(
-            "Alice", "OPEN", "Round 1", "<p>Spec</p>",
+            "Alice", "Alice", "OPEN", "Round 1", "<p>Spec</p>",
             List.of(new InputFieldDef("list", "l", "p", "text")),
             new InputFieldDef("expected", "e", "p", "numeric"),
-            3, 7, 2, 8, 120, 1000L,
-            List.of(), null, 10, false
+            3, 7, 2, 8, 120, 60_000L,
+            List.of(), null, null, 10, false
         );
         assertEquals("Alice", ps.playerName());
         assertEquals("OPEN", ps.roundStatus());
@@ -70,11 +71,12 @@ class DtoTest {
     @Test
     void scoreboardEntry() {
         Instant now = Instant.now();
-        ScoreboardEntry se = new ScoreboardEntry(1L, "Alice", 5, 7, 3, now);
+        ScoreboardEntry se = new ScoreboardEntry(1L, "Alice", 5, 7, 4, 3, now);
         assertEquals(1L, se.participantId());
         assertEquals("Alice", se.displayName());
         assertEquals(5, se.score());
         assertEquals(7, se.totalMutants());
+        assertEquals(4, se.testsUsed());
         assertEquals(3, se.validTestCount());
         assertEquals(now, se.lastScoreTime());
     }
@@ -113,13 +115,15 @@ class DtoTest {
     @Test
     void analyticsData() {
         AnalyticsData ad = new AnalyticsData(
-            100, 10, 20, 4.5,
+            100, 10, 0.1, 20, 18, 4.5,
             Map.of("M1", 15L, "M2", 10L),
             Map.of("M1", "start-at-one", "M2", "skip-last")
         );
         assertEquals(100, ad.totalSubmissions());
         assertEquals(10, ad.invalidSubmissions());
         assertEquals(20, ad.participantCount());
+        assertEquals(18, ad.activeParticipantCount());
+        assertEquals(0.1, ad.invalidRate());
         assertEquals(4.5, ad.averageScore());
         assertEquals(2, ad.mutantKillCounts().size());
         assertEquals(2, ad.mutantNames().size());

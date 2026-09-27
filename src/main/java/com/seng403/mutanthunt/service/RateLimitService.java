@@ -23,14 +23,16 @@ public class RateLimitService {
 
     // ── Submission rate limit ─────────────────────────
 
+    /** Atomically checks the cooldown and, if allowed, records this submission time. */
     public boolean isSubmissionAllowed(Long participantId, int rateLimitMs) {
         long now = System.currentTimeMillis();
-        Long last = lastSubmission.get(participantId);
-        if (last != null && (now - last) < rateLimitMs) {
-            return false;
-        }
-        lastSubmission.put(participantId, now);
-        return true;
+        boolean[] allowed = {false};
+        lastSubmission.compute(participantId, (id, last) -> {
+            if (last != null && (now - last) < rateLimitMs) return last;
+            allowed[0] = true;
+            return now;
+        });
+        return allowed[0];
     }
 
     // ── Login brute-force protection ──────────────────

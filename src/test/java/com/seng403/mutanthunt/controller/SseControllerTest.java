@@ -25,7 +25,7 @@ class SseControllerTest {
     @Test
     void adminStream_requiresAuth() throws Exception {
         mvc.perform(get("/sse/admin"))
-            .andExpect(status().is3xxRedirection());
+            .andExpect(status().isUnauthorized());
     }
 
     @Test

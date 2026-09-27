@@ -1,17 +1,18 @@
 package com.seng403.mutanthunt.controller;
 
-import com.seng403.mutanthunt.dto.*;
+import com.seng403.mutanthunt.dto.AnalyticsData;
 import com.seng403.mutanthunt.entity.*;
 import com.seng403.mutanthunt.problem.ProblemRegistry;
-import com.seng403.mutanthunt.repository.*;
 import com.seng403.mutanthunt.service.*;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/admin/api")
@@ -21,63 +22,54 @@ public class AdminApiController {
     private final GameService gameService;
     private final ExportService exportService;
     private final ProblemRegistry problemRegistry;
-    private final SubmissionRepository submissionRepo;
-    private final MutantResultRepository mutantResultRepo;
-    private final ParticipantRepository participantRepo;
 
     public AdminApiController(AdminService adminService, GameService gameService,
-                               ExportService exportService, ProblemRegistry problemRegistry,
-                               SubmissionRepository submissionRepo,
-                               MutantResultRepository mutantResultRepo,
-                               ParticipantRepository participantRepo) {
+                               ExportService exportService, ProblemRegistry problemRegistry) {
         this.adminService = adminService;
         this.gameService = gameService;
         this.exportService = exportService;
         this.problemRegistry = problemRegistry;
-        this.submissionRepo = submissionRepo;
-        this.mutantResultRepo = mutantResultRepo;
-        this.participantRepo = participantRepo;
     }
 
     // ── Sessions ──────────────────────────────────────
 
     @GetMapping("/sessions")
     public List<Map<String, Object>> getSessions() {
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (GameSession s : adminService.getActiveSessions()) {
-            result.add(sessionToMap(s));
-        }
-        return result;
+        return adminService.getActiveSessions().stream().map(this::sessionToMap).toList();
     }
 
     @GetMapping("/sessions/archived")
     public List<Map<String, Object>> getArchivedSessions() {
-        return adminService.getArchivedSessions().stream()
-            .map(this::sessionToMap).toList();
+        return adminService.getArchivedSessions().stream().map(this::sessionToMap).toList();
     }
 
     @PostMapping("/sessions")
     public Map<String, Object> createSession(@RequestBody Map<String, String> body) {
-        String name = body.getOrDefault("name", "New Session");
-        return sessionToMap(adminService.createSession(name));
+        return sessionToMap(adminService.createSession(body.get("name")));
     }
 
     @PostMapping("/sessions/{id}/activate")
     public ResponseEntity<?> activateSession(@PathVariable Long id) {
         adminService.activateSession(id);
-        return ResponseEntity.ok(Map.of("success", true));
+        return ok();
     }
 
     @PostMapping("/sessions/{id}/archive")
     public ResponseEntity<?> archiveSession(@PathVariable Long id) {
         adminService.archiveSession(id);
-        return ResponseEntity.ok(Map.of("success", true));
+        return ok();
+    }
+
+    @PostMapping("/sessions/{id}/unarchive")
+    public ResponseEntity<?> unarchiveSession(@PathVariable Long id) {
+        adminService.unarchiveSession(id);
+        return ok();
     }
 
     @DeleteMapping("/sessions/{id}")
     public ResponseEntity<?> deleteSession(@PathVariable Long id) {
         adminService.deleteSession(id);
-        return ResponseEntity.ok(Map.of("success", true));
+        return ok();
     }
 
     // ── Settings ──────────────────────────────────────
@@ -97,8 +89,7 @@ public class AdminApiController {
 
     @GetMapping("/sessions/{sessionId}/rounds")
     public List<Map<String, Object>> getRounds(@PathVariable Long sessionId) {
-        return adminService.getRounds(sessionId).stream()
-            .map(this::roundToMap).toList();
+        return adminService.getRounds(sessionId).stream().map(this::roundToMap).toList();
     }
 
     @PostMapping("/sessions/{sessionId}/rounds")
@@ -106,8 +97,8 @@ public class AdminApiController {
                                             @RequestBody Map<String, String> body) {
         Round r = adminService.createRound(
             sessionId,
-            body.getOrDefault("name", "Round"),
-            body.getOrDefault("problemId", "indexOf"),
+            body.get("name"),
+            body.get("problemId"),
             parseIntOrNull(body.get("testLimit")),
             parseIntOrNull(body.get("timeLimitSeconds"))
         );
@@ -123,6 +114,12 @@ public class AdminApiController {
             parseIntOrNull(body.get("timeLimitSeconds"))
         );
         return roundToMap(r);
+    }
+
+    @DeleteMapping("/rounds/{id}")
+    public ResponseEntity<?> deleteRound(@PathVariable Long id) {
+        adminService.deleteRound(id);
+        return ok();
     }
 
     @PostMapping("/rounds/{id}/open")
@@ -142,71 +139,46 @@ public class AdminApiController {
 
     // ── Participants ──────────────────────────────────
 
+    /** Name, number, board name, join time, rejoin count and score per round. */
     @GetMapping("/sessions/{sessionId}/participants")
-    public List<Map<String, Object>> getParticipants(@PathVariable Long sessionId) {
-        List<Participant> participants = adminService.getParticipants(sessionId);
-        GameSession session = adminService.getSession(sessionId).orElseThrow();
-
-        return participants.stream().map(p -> {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", p.getId());
-            m.put("fullName", p.getFullName());
-            m.put("studentNumber", p.getStudentNumber());
-            m.put("nickname", p.getNickname());
-            m.put("anonymousName", p.getAnonymousName());
-            m.put("displayName", gameService.resolveDisplayName(p, session.getAnonymityMode()));
-            m.put("joinedAt", p.getJoinedAt().toEpochMilli());
-            return m;
-        }).toList();
+    public Map<String, Object> getParticipants(@PathVariable Long sessionId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("rounds", adminService.roundsOldestFirst(sessionId).stream()
+            .map(r -> Map.of("id", r.getId(), "name", r.getName(),
+                "totalMutants", adminService.problemOf(r).getMutants().size()))
+            .toList());
+        result.put("participants", adminService.getParticipantRows(sessionId));
+        return result;
     }
 
     @PostMapping("/participants/{id}/kick")
     public ResponseEntity<?> kickParticipant(@PathVariable Long id) {
         adminService.kickParticipant(id);
-        return ResponseEntity.ok(Map.of("success", true));
+        return ok();
     }
 
     @PostMapping("/participants/{id}/nickname")
     public ResponseEntity<?> updateNickname(@PathVariable Long id,
                                              @RequestBody Map<String, String> body) {
         adminService.updateNickname(id, body.get("nickname"));
-        return ResponseEntity.ok(Map.of("success", true));
+        return ok();
     }
 
     // ── Submissions ───────────────────────────────────
 
+    /** All submissions of a session, filterable by round, student and validity. */
+    @GetMapping("/sessions/{sessionId}/submissions")
+    public List<Map<String, Object>> getSessionSubmissions(@PathVariable Long sessionId,
+                                                           @RequestParam(required = false) Long roundId,
+                                                           @RequestParam(required = false) Long participantId,
+                                                           @RequestParam(required = false) Validity validity) {
+        return adminService.getSubmissionRows(sessionId, roundId, participantId, validity);
+    }
+
     @GetMapping("/rounds/{roundId}/submissions")
     public List<Map<String, Object>> getSubmissions(@PathVariable Long roundId) {
-        List<Submission> subs = adminService.getSubmissions(roundId);
-        Map<Long, Participant> cache = new HashMap<>();
-
-        return subs.stream().map(s -> {
-            Participant p = cache.computeIfAbsent(s.getParticipantId(),
-                id -> participantRepo.findById(id).orElse(null));
-            Map<String, String> inputs = gameService.parseRawInputs(s.getRawInputsJson());
-
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", s.getId());
-            m.put("time", s.getCreatedAt().toEpochMilli());
-            m.put("participantName", p != null ? p.getFullName() : "?");
-            m.put("studentNumber", p != null ? p.getStudentNumber() : "?");
-            m.put("list", inputs.getOrDefault("list", ""));
-            m.put("target", inputs.getOrDefault("target", ""));
-            m.put("expected", s.getExpectedValue());
-            m.put("referenceResult", s.getReferenceResult());
-            m.put("validity", s.getValidity().name());
-
-            if (s.getValidity() == Validity.VALID) {
-                List<MutantResult> results = mutantResultRepo.findBySubmissionId(s.getId());
-                m.put("killedMutants", results.stream()
-                    .filter(MutantResult::isKilled)
-                    .map(MutantResult::getMutantId)
-                    .toList());
-            } else {
-                m.put("killedMutants", List.of());
-            }
-            return m;
-        }).toList();
+        Round r = adminService.getRound(roundId);
+        return adminService.getSubmissionRows(r.getSessionId(), roundId, null, null);
     }
 
     // ── Analytics ─────────────────────────────────────
@@ -216,24 +188,32 @@ public class AdminApiController {
         return gameService.getAnalytics(roundId);
     }
 
-    // ── Export ─────────────────────────────────────────
+    // ── Export (CSV, UTF-8 with BOM) ──────────────────
 
     @GetMapping("/sessions/{sessionId}/export/participants")
-    public void exportParticipants(@PathVariable Long sessionId, HttpServletResponse response)
-            throws Exception {
-        response.setContentType("text/csv; charset=UTF-8");
-        response.setHeader("Content-Disposition",
-            "attachment; filename=participants_session_" + sessionId + ".csv");
-        exportService.exportParticipants(response.getWriter(), sessionId);
+    public void exportParticipants(@PathVariable Long sessionId, HttpServletResponse response) throws IOException {
+        exportService.exportParticipants(csv(response, "participants_session_" + sessionId), sessionId);
+    }
+
+    @GetMapping("/sessions/{sessionId}/export/submissions")
+    public void exportSessionSubmissions(@PathVariable Long sessionId, HttpServletResponse response) throws IOException {
+        exportService.exportSessionSubmissions(csv(response, "submissions_session_" + sessionId), sessionId);
+    }
+
+    @GetMapping("/rounds/{roundId}/export/participants")
+    public void exportRoundParticipants(@PathVariable Long roundId, HttpServletResponse response) throws IOException {
+        exportService.exportParticipantsForRound(csv(response, "participants_round_" + roundId), roundId);
     }
 
     @GetMapping("/rounds/{roundId}/export/submissions")
-    public void exportSubmissions(@PathVariable Long roundId, HttpServletResponse response)
-            throws Exception {
+    public void exportSubmissions(@PathVariable Long roundId, HttpServletResponse response) throws IOException {
+        exportService.exportSubmissions(csv(response, "submissions_round_" + roundId), roundId);
+    }
+
+    private PrintWriter csv(HttpServletResponse response, String baseName) throws IOException {
         response.setContentType("text/csv; charset=UTF-8");
-        response.setHeader("Content-Disposition",
-            "attachment; filename=submissions_round_" + roundId + ".csv");
-        exportService.exportSubmissions(response.getWriter(), roundId);
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + baseName + ".csv\"");
+        return new PrintWriter(new OutputStreamWriter(response.getOutputStream(), StandardCharsets.UTF_8));
     }
 
     // ── Board control ─────────────────────────────────
@@ -241,7 +221,13 @@ public class AdminApiController {
     @PostMapping("/board-command")
     public ResponseEntity<?> boardCommand(@RequestBody Map<String, String> body) {
         adminService.sendBoardCommand(body.getOrDefault("command", "SHOW_SCOREBOARD"));
-        return ResponseEntity.ok(Map.of("success", true));
+        return ok();
+    }
+
+    /** Same payload as the public board API (kept for the admin preview). */
+    @GetMapping("/board-data")
+    public Map<String, Object> getBoardData() {
+        return gameService.getBoardPayload();
     }
 
     // ── Problems ──────────────────────────────────────
@@ -253,32 +239,11 @@ public class AdminApiController {
             .toList();
     }
 
-    // ── Board data (initial load) ─────────────────────
-
-    @GetMapping("/board-data")
-    public ResponseEntity<?> getBoardData() {
-        var session = gameService.getActiveSession();
-        if (session.isEmpty()) {
-            return ResponseEntity.ok(Map.of("hasSession", false));
-        }
-        BoardData bd = gameService.getBoardData(session.get().getId());
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("hasSession", true);
-        result.put("sessionName", bd.session().getName());
-        result.put("anonymityMode", bd.session().getAnonymityMode().name());
-        result.put("mutantPanelMode", bd.session().getMutantPanelMode().name());
-        result.put("participantCount", bd.participantCount());
-        if (bd.round() != null) {
-            result.put("round", roundToMap(bd.round()));
-            result.put("specification", bd.problem().getSpecification());
-            result.put("scoreboard", bd.scoreboard());
-            result.put("mutantKillCounts", bd.mutantKillCounts());
-            result.put("mutantInfos", bd.mutantInfos());
-        }
-        return ResponseEntity.ok(result);
-    }
-
     // ── Helpers ───────────────────────────────────────
+
+    private static ResponseEntity<Map<String, Object>> ok() {
+        return ResponseEntity.ok(Map.of("success", true));
+    }
 
     private Map<String, Object> sessionToMap(GameSession s) {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -298,6 +263,7 @@ public class AdminApiController {
     private Map<String, Object> roundToMap(Round r) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", r.getId());
+        m.put("sessionId", r.getSessionId());
         m.put("name", r.getName());
         m.put("problemId", r.getProblemId());
         m.put("testLimit", r.getTestLimit());
@@ -305,11 +271,17 @@ public class AdminApiController {
         m.put("status", r.getStatus().name());
         m.put("openedAt", r.getOpenedAt() != null ? r.getOpenedAt().toEpochMilli() : null);
         m.put("closedAt", r.getClosedAt() != null ? r.getClosedAt().toEpochMilli() : null);
+        m.put("deadline", r.getDeadline() != null && r.getStatus() == RoundStatus.OPEN
+            ? r.getDeadline().toEpochMilli() : null);
         return m;
     }
 
     private Integer parseIntOrNull(String val) {
         if (val == null || val.isBlank()) return null;
-        try { return Integer.parseInt(val.trim()); } catch (NumberFormatException e) { return null; }
+        try {
+            return Integer.parseInt(val.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("admin.error.number");
+        }
     }
 }

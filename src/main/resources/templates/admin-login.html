@@ -3,25 +3,25 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Mutant Hunt – Admin Login</title>
+    <title th:text="#{admin.login.title}">Admin Login</title>
     <link rel="stylesheet" th:href="@{/css/style.css}"/>
 </head>
 <body class="student-body">
-<div class="screen">
-    <div class="card" style="max-width:400px;margin:auto">
-        <h1 class="logo">🔒 Admin Login</h1>
-        <div th:if="${param.error}" class="alert alert-error">Invalid password.</div>
-        <div th:if="${param.logout}" class="alert alert-info">Signed out.</div>
-        <div th:if="${param.blocked}" class="alert alert-error">Too many attempts. Try again later.</div>
+<main class="screen">
+    <div class="card login-card">
+        <h1 class="logo">🔒 <span th:text="#{admin.login.title}">Admin Login</span></h1>
+        <div th:if="${param.error}" class="alert alert-error" th:text="#{admin.login.error}">Invalid password.</div>
+        <div th:if="${param.logout}" class="alert alert-info" th:text="#{admin.login.loggedOut}">Signed out.</div>
+        <div th:if="${param.blocked}" class="alert alert-error" th:text="#{admin.login.blocked}">Too many attempts.</div>
         <form th:action="@{/admin/login}" method="post" autocomplete="off">
             <div class="field">
-                <label for="password">Password</label>
-                <input id="password" name="password" type="password" required autofocus/>
+                <label for="password" th:text="#{admin.login.password}">Password</label>
+                <input id="password" name="password" type="password" required autofocus autocomplete="current-password"/>
                 <input type="hidden" name="username" value="admin"/>
             </div>
-            <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+            <button type="submit" class="btn btn-primary btn-full" th:text="#{admin.login.button}">Sign In</button>
         </form>
     </div>
-</div>
+</main>
 </body>
 </html>

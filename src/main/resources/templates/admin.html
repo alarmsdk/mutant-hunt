@@ -3,120 +3,164 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Mutant Hunt – Admin</title>
+    <title th:text="#{admin.title}">Mutant Hunt – Admin</title>
     <link rel="stylesheet" th:href="@{/css/style.css}"/>
     <meta name="_csrf" th:content="${_csrf.token}"/>
     <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
 </head>
 <body class="admin-body">
 <header class="admin-header">
-    <h1>🧬 Mutant Hunt – Admin</h1>
-    <nav>
-        <button class="tab-btn active" data-tab="sessions">Sessions</button>
-        <button class="tab-btn" data-tab="rounds">Rounds</button>
-        <button class="tab-btn" data-tab="settings">Settings</button>
-        <button class="tab-btn" data-tab="participants">Participants</button>
-        <button class="tab-btn" data-tab="submissions">Submissions</button>
-        <button class="tab-btn" data-tab="analytics">Analytics</button>
-        <button class="tab-btn" data-tab="board-control">Board</button>
-        <a th:href="@{/admin/logout}" class="btn btn-sm btn-outline">Sign Out</a>
+    <div class="admin-brand">
+        <h1>🧬 <span th:text="#{admin.title}">Admin</span></h1>
+        <span id="conn-dot" class="conn-dot" title="SSE"></span>
+        <span id="selected-session" class="admin-session-label"></span>
+    </div>
+    <nav class="admin-nav">
+        <button class="tab-btn active" data-tab="sessions" th:text="#{admin.tab.sessions}">Sessions</button>
+        <button class="tab-btn" data-tab="rounds" th:text="#{admin.tab.rounds}">Rounds</button>
+        <button class="tab-btn" data-tab="settings" th:text="#{admin.tab.settings}">Settings</button>
+        <button class="tab-btn" data-tab="participants" th:text="#{admin.tab.participants}">Participants</button>
+        <button class="tab-btn" data-tab="submissions" th:text="#{admin.tab.submissions}">Submissions</button>
+        <button class="tab-btn" data-tab="analytics" th:text="#{admin.tab.analytics}">Analytics</button>
+        <button class="tab-btn" data-tab="board" th:text="#{admin.tab.board}">Board</button>
+        <a th:href="@{/board}" target="_blank" class="btn btn-sm btn-outline" th:text="#{admin.openBoard}">Open board</a>
+        <form th:action="@{/admin/logout}" method="post" class="inline-form">
+            <button type="submit" class="btn btn-sm btn-outline" th:text="#{admin.logout}">Sign Out</button>
+        </form>
     </nav>
 </header>
 
+<div id="toast" class="toast" role="status" style="display:none"></div>
+
 <main class="admin-main">
 
-    <!-- SESSIONS TAB -->
+    <!-- SESSIONS -->
     <section id="tab-sessions" class="tab-panel">
         <div class="panel-header">
-            <h2>Sessions</h2>
-            <div class="actions">
-                <input id="new-session-name" type="text" placeholder="Session name" class="input-sm"/>
-                <button id="create-session-btn" class="btn btn-primary btn-sm">New Session</button>
-            </div>
+            <h2 th:text="#{admin.sessions.title}">Sessions</h2>
+            <form id="create-session-form" class="actions">
+                <input id="new-session-name" type="text" maxlength="100" class="input-sm input-wide"
+                       th:placeholder="#{admin.sessions.name}"/>
+                <button type="submit" class="btn btn-primary btn-sm" th:text="#{admin.sessions.create}">New Session</button>
+            </form>
         </div>
-        <table class="data-table">
-            <thead><tr><th>Name</th><th>Active</th><th>Created</th><th>Actions</th></tr></thead>
-            <tbody id="sessions-body"></tbody>
-        </table>
+        <div class="table-scroll">
+            <table class="data-table">
+                <thead><tr>
+                    <th th:text="#{admin.sessions.col.name}">Name</th>
+                    <th th:text="#{admin.sessions.col.status}">Status</th>
+                    <th th:text="#{admin.sessions.col.created}">Created</th>
+                    <th th:text="#{admin.sessions.col.actions}">Actions</th>
+                </tr></thead>
+                <tbody id="sessions-body"></tbody>
+            </table>
+        </div>
+        <h3 th:text="#{admin.sessions.archivedTitle}">Archived Sessions</h3>
+        <div class="table-scroll">
+            <table class="data-table">
+                <tbody id="archived-body"></tbody>
+            </table>
+        </div>
     </section>
 
-    <!-- ROUNDS TAB -->
+    <!-- ROUNDS -->
     <section id="tab-rounds" class="tab-panel" style="display:none">
         <div class="panel-header">
-            <h2>Rounds <span id="rounds-session-name" class="muted"></span></h2>
-            <div class="actions">
-                <input id="new-round-name" type="text" placeholder="Round name" class="input-sm"/>
-                <input id="new-round-limit" type="number" placeholder="Test limit (0=∞)" class="input-sm" style="width:130px"/>
-                <input id="new-round-time" type="number" placeholder="Time limit sec" class="input-sm" style="width:130px"/>
-                <button id="create-round-btn" class="btn btn-primary btn-sm">New Round</button>
-            </div>
+            <h2 th:text="#{admin.rounds.title}">Rounds</h2>
+            <form id="create-round-form" class="actions">
+                <input id="new-round-name" type="text" maxlength="100" class="input-sm" th:placeholder="#{admin.rounds.name}"/>
+                <select id="new-round-problem" class="input-sm" th:title="#{admin.rounds.problem}"></select>
+                <label class="inline-label"><span th:text="#{admin.rounds.testLimit}"></span>
+                    <input id="new-round-limit" type="number" min="0" max="1000" value="10" class="input-sm input-num"/></label>
+                <label class="inline-label"><span th:text="#{admin.rounds.timeLimit}"></span>
+                    <input id="new-round-time" type="number" min="0" max="1440" step="0.5" value="0" class="input-sm input-num"/></label>
+                <button type="submit" class="btn btn-primary btn-sm" th:text="#{admin.rounds.create}">New Round</button>
+            </form>
         </div>
-        <table class="data-table">
-            <thead><tr><th>Name</th><th>Problem</th><th>Limit</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody id="rounds-body"></tbody>
-        </table>
+        <div class="table-scroll">
+            <table class="data-table">
+                <thead><tr>
+                    <th th:text="#{admin.rounds.col.name}">Name</th>
+                    <th th:text="#{admin.rounds.col.problem}">Problem</th>
+                    <th th:text="#{admin.rounds.col.limit}">Limit</th>
+                    <th th:text="#{admin.rounds.col.time}">Time</th>
+                    <th th:text="#{admin.rounds.col.status}">Status</th>
+                    <th th:text="#{admin.rounds.col.actions}">Actions</th>
+                </tr></thead>
+                <tbody id="rounds-body"></tbody>
+            </table>
+        </div>
     </section>
 
-    <!-- SETTINGS TAB -->
+    <!-- SETTINGS -->
     <section id="tab-settings" class="tab-panel" style="display:none">
-        <h2>Session Settings</h2>
+        <h2 th:text="#{admin.settings.title}">Session Settings</h2>
+        <p class="muted" th:text="#{admin.settings.hint}"></p>
         <form id="settings-form" class="settings-grid">
             <div class="field">
-                <label>Board anonymity mode</label>
+                <label for="set-name" th:text="#{admin.settings.sessionName}">Name</label>
+                <input id="set-name" type="text" maxlength="100"/>
+            </div>
+            <div class="field">
+                <label for="set-anonymity" th:text="#{admin.settings.anonymity}">Anonymity</label>
                 <select id="set-anonymity">
-                    <option value="FULL_NAME">Full Name</option>
-                    <option value="NICKNAME">Nickname</option>
-                    <option value="ANONYMOUS">Anonymous (auto-generated)</option>
-                    <option value="NUMBER_MASKED">Masked Number</option>
+                    <option value="FULL_NAME" th:text="#{admin.settings.anonymity.FULL_NAME}"></option>
+                    <option value="NICKNAME" th:text="#{admin.settings.anonymity.NICKNAME}"></option>
+                    <option value="ANONYMOUS" th:text="#{admin.settings.anonymity.ANONYMOUS}"></option>
+                    <option value="NUMBER_MASKED" th:text="#{admin.settings.anonymity.NUMBER_MASKED}"></option>
                 </select>
             </div>
             <div class="field">
-                <label>Accept new participants</label>
+                <label for="set-joinOpen" th:text="#{admin.settings.joinOpen}">Join open</label>
                 <select id="set-joinOpen">
-                    <option value="true">Yes</option>
-                    <option value="false">No</option>
+                    <option value="true" th:text="#{common.yes}">Yes</option>
+                    <option value="false" th:text="#{common.no}">No</option>
                 </select>
             </div>
             <div class="field">
-                <label>Student ID required length (0 = any)</label>
+                <label for="set-studentIdLength" th:text="#{admin.settings.studentIdLength}">Length</label>
                 <input id="set-studentIdLength" type="number" min="0" max="20"/>
             </div>
             <div class="field">
-                <label>Mutant panel on board</label>
+                <label for="set-mutantPanel" th:text="#{admin.settings.mutantPanel}">Mutant panel</label>
                 <select id="set-mutantPanel">
-                    <option value="HIDDEN">Hidden</option>
-                    <option value="COUNT_ONLY">Kill count only</option>
-                    <option value="REVEALED">Full reveal</option>
+                    <option value="HIDDEN" th:text="#{admin.settings.mutantPanel.HIDDEN}"></option>
+                    <option value="COUNT_ONLY" th:text="#{admin.settings.mutantPanel.COUNT_ONLY}"></option>
+                    <option value="REVEALED" th:text="#{admin.settings.mutantPanel.REVEALED}"></option>
                 </select>
             </div>
             <div class="field">
-                <label>Submission cooldown (ms)</label>
-                <input id="set-rateLimit" type="number" min="0" max="60000"/>
+                <label for="set-rateLimit" th:text="#{admin.settings.rateLimit}">Cooldown</label>
+                <input id="set-rateLimit" type="number" min="0" max="60000" step="100"/>
             </div>
-            <button type="submit" class="btn btn-primary">Save Settings</button>
-            <div id="settings-msg" class="alert alert-info" style="display:none">Settings saved.</div>
+            <div><button type="submit" class="btn btn-primary" th:text="#{common.save}">Save</button></div>
         </form>
     </section>
 
-    <!-- PARTICIPANTS TAB -->
+    <!-- PARTICIPANTS -->
     <section id="tab-participants" class="tab-panel" style="display:none">
         <div class="panel-header">
-            <h2>Participants <span id="participant-count" class="badge"></span></h2>
+            <h2><span th:text="#{admin.participants.title}">Participants</span> <span id="participant-count" class="badge"></span></h2>
         </div>
-        <table class="data-table">
-            <thead><tr><th>Full Name</th><th>Student #</th><th>Display Name</th><th>Joined</th><th>Actions</th></tr></thead>
-            <tbody id="participants-body"></tbody>
-        </table>
+        <div class="table-scroll">
+            <table class="data-table">
+                <thead id="participants-head"></thead>
+                <tbody id="participants-body"></tbody>
+            </table>
+        </div>
     </section>
 
-    <!-- SUBMISSIONS TAB -->
+    <!-- SUBMISSIONS -->
     <section id="tab-submissions" class="tab-panel" style="display:none">
         <div class="panel-header">
-            <h2>Submissions</h2>
+            <h2><span th:text="#{admin.submissions.title}">Submissions</span>
+                <span class="badge badge-live" th:text="#{admin.submissions.live}">live</span>
+                <span id="submission-count" class="muted small"></span></h2>
             <div class="actions">
-                <select id="sub-filter-round" class="input-sm"><option value="">All Rounds</option></select>
+                <select id="sub-filter-round" class="input-sm"></select>
+                <select id="sub-filter-student" class="input-sm"></select>
                 <select id="sub-filter-validity" class="input-sm">
-                    <option value="">All</option>
+                    <option value="" th:text="#{admin.submissions.filter.allValidity}">All</option>
                     <option value="VALID">VALID</option>
                     <option value="INVALID">INVALID</option>
                 </select>
@@ -125,53 +169,81 @@
         <div class="table-scroll">
             <table class="data-table data-table-sm">
                 <thead><tr>
-                    <th>Time</th><th>Name</th><th>Student #</th>
+                    <th th:text="#{admin.submissions.time}">Time</th>
+                    <th th:text="#{admin.submissions.round}">Round</th>
+                    <th th:text="#{admin.submissions.name}">Name</th>
+                    <th th:text="#{admin.submissions.studentId}">Student #</th>
                     <th>list</th><th>target</th><th>expected</th>
-                    <th>Ref</th><th>Validity</th><th>Killed</th>
+                    <th th:text="#{admin.submissions.reference}">Ref</th>
+                    <th th:text="#{admin.submissions.validity}">Validity</th>
+                    <th th:text="#{admin.submissions.killed}">Killed</th>
                 </tr></thead>
                 <tbody id="submissions-body"></tbody>
             </table>
         </div>
     </section>
 
-    <!-- ANALYTICS TAB -->
+    <!-- ANALYTICS -->
     <section id="tab-analytics" class="tab-panel" style="display:none">
         <div class="panel-header">
-            <h2>Analytics</h2>
-            <select id="analytics-round" class="input-sm"><option value="">Select round</option></select>
+            <h2 th:text="#{admin.analytics.title}">Analytics</h2>
+            <select id="analytics-round" class="input-sm"></select>
         </div>
         <div id="analytics-content" style="display:none">
             <div class="analytics-stats">
-                <div class="stat-card"><div class="stat-value" id="an-total">0</div><div>Total Submissions</div></div>
-                <div class="stat-card"><div class="stat-value" id="an-invalid">0</div><div>Invalid Tests</div></div>
-                <div class="stat-card"><div class="stat-value" id="an-avg">0</div><div>Average Score</div></div>
-                <div class="stat-card"><div class="stat-value" id="an-participants">0</div><div>Participants</div></div>
+                <div class="stat-card"><div class="stat-value" id="an-total">0</div><div th:text="#{admin.analytics.totalSubmissions}"></div></div>
+                <div class="stat-card"><div class="stat-value" id="an-invalid">0</div><div th:text="#{admin.analytics.invalidRate}"></div></div>
+                <div class="stat-card"><div class="stat-value" id="an-avg">0</div><div th:text="#{admin.analytics.avgScore}"></div></div>
+                <div class="stat-card"><div class="stat-value" id="an-participants">0</div><div th:text="#{admin.analytics.participants}"></div></div>
             </div>
-            <h3>Mutant Kill Rates</h3>
-            <table class="data-table">
-                <thead><tr><th>Mutant</th><th>Name</th><th>Killed By</th><th>Kill %</th><th>Bar</th></tr></thead>
-                <tbody id="analytics-mutants"></tbody>
-            </table>
+            <h3 th:text="#{admin.analytics.mutantKills}">Mutant kill rates</h3>
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead><tr>
+                        <th th:text="#{admin.analytics.mutant}">Mutant</th>
+                        <th th:text="#{admin.analytics.mutantName}">Name</th>
+                        <th th:text="#{admin.analytics.killCount}">Killed by</th>
+                        <th th:text="#{admin.analytics.killRate}">Kill %</th>
+                        <th></th>
+                    </tr></thead>
+                    <tbody id="analytics-mutants"></tbody>
+                </table>
+            </div>
         </div>
     </section>
 
-    <!-- BOARD CONTROL TAB -->
-    <section id="tab-board-control" class="tab-panel" style="display:none">
-        <h2>Board Control</h2>
+    <!-- BOARD & EXPORT -->
+    <section id="tab-board" class="tab-panel" style="display:none">
+        <h2 th:text="#{admin.board.title}">Board Control</h2>
+        <p class="muted" th:text="#{admin.board.hint}"></p>
+        <p class="muted small" th:text="#{admin.board.joinUrl(${joinUrl})}"></p>
         <div class="button-group">
-            <button class="btn btn-lg" onclick="sendBoardCmd('SHOW_QR')">📷 Show QR Code</button>
-            <button class="btn btn-lg" onclick="sendBoardCmd('SHOW_SCOREBOARD')">📊 Show Scoreboard</button>
-            <button class="btn btn-lg" onclick="sendBoardCmd('FULLSCREEN_SCORE')">🖥️ Fullscreen Scores</button>
+            <button class="btn btn-lg" data-board-cmd="SHOW_QR">📷 <span th:text="#{admin.board.showQr}"></span></button>
+            <button class="btn btn-lg" data-board-cmd="SHOW_SCOREBOARD">📊 <span th:text="#{admin.board.showScoreboard}"></span></button>
+            <button class="btn btn-lg" data-board-cmd="FULLSCREEN_SCORE">🖥️ <span th:text="#{admin.board.fullscreen}"></span></button>
         </div>
-        <h3 style="margin-top:2rem">Export</h3>
-        <div class="button-group">
-            <button class="btn btn-outline" id="export-participants-btn">📥 Participants CSV</button>
-            <button class="btn btn-outline" id="export-submissions-btn">📥 Submissions CSV</button>
+
+        <h2 class="mt" th:text="#{admin.export.title}">Export</h2>
+        <p class="muted" th:text="#{admin.export.hint}"></p>
+        <div class="export-grid">
+            <div class="export-box">
+                <h3 th:text="#{admin.export.session}">Whole session</h3>
+                <a class="btn btn-outline" id="export-session-participants" th:text="#{admin.export.participants}"></a>
+                <a class="btn btn-outline" id="export-session-submissions" th:text="#{admin.export.submissions}"></a>
+            </div>
+            <div class="export-box">
+                <h3 th:text="#{admin.export.round}">Single round</h3>
+                <select id="export-round" class="input-sm"></select>
+                <a class="btn btn-outline" id="export-round-participants" th:text="#{admin.export.participants}"></a>
+                <a class="btn btn-outline" id="export-round-submissions" th:text="#{admin.export.submissions}"></a>
+            </div>
         </div>
     </section>
 
 </main>
 
+<script th:inline="javascript">window.MSG = /*[[${messages}]]*/ {};</script>
+<script th:src="@{/js/i18n.js}"></script>
 <script th:src="@{/js/admin.js}"></script>
 </body>
 </html>

@@ -1,29 +1,24 @@
 /* ═══════════════════════════════════════════════════════
-   Student Page – /
+   Student Page – /   (mobile first)
    ═══════════════════════════════════════════════════════ */
 (function () {
     'use strict';
 
     const $ = (s, p) => (p || document).querySelector(s);
-    const show = el => el.style.display = '';
-    const hide = el => el.style.display = 'none';
+    const show = el => { if (el) el.style.display = ''; };
+    const hide = el => { if (el) el.style.display = 'none'; };
 
-    const screens = {
-        join: $('#join-screen'),
-        waiting: $('#waiting-screen'),
-        game: $('#game-screen'),
-        closed: $('#closed-screen'),
-        revealed: $('#revealed-screen')
-    };
-
-    let currentScreen = 'join';
-    let sse = null;
-    let pollTimer = null;
+    const screens = ['join', 'waiting', 'game', 'closed', 'revealed', 'kicked'];
+    let currentScreen = null;
+    let stream = null;
+    let status = null;
+    let fieldsKey = null;       // which problem's fields are rendered
+    let timerInterval = null;
+    let refreshing = false, refreshAgain = false;
 
     function showScreen(name) {
-        Object.entries(screens).forEach(([k, el]) => {
-            if (k === name) show(el); else hide(el);
-        });
+        screens.forEach(k => (k === name ? show : hide)($('#' + k + '-screen')));
+        if (currentScreen !== name) window.scrollTo(0, 0);
         currentScreen = name;
     }
 
@@ -33,271 +28,339 @@
         const res = await fetch(url, {
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
+            cache: 'no-store',
             ...opts
         });
-        return res.json();
+        let body = {};
+        try { body = await res.json(); } catch (_) { /* empty body */ }
+        body._status = res.status;
+        return body;
+    }
+
+    function setAlert(el, kind, text) {
+        el.className = 'alert alert-' + kind;
+        el.textContent = text;
+        show(el);
     }
 
     /* ── Join ───────────────────────────────────────── */
 
+    const sidInput = $('#join-sid');
+    const requiredLen = parseInt(sidInput.dataset.length || '0', 10);
+    if (requiredLen > 0) sidInput.placeholder = t('join.studentId.placeholder.length', requiredLen);
+    sidInput.addEventListener('input', () => { sidInput.value = sidInput.value.replace(/\D/g, ''); });
+
     $('#join-form').addEventListener('submit', async e => {
         e.preventDefault();
-        hide($('#join-error'));
+        const err = $('#join-error');
+        hide(err);
+        const fullName = $('#join-name').value.trim();
+        const studentNumber = sidInput.value.trim();
+        if (!fullName) return setAlert(err, 'error', t('join.error.name.required'));
+        if (!studentNumber) return setAlert(err, 'error', t('join.error.studentId.required'));
+
         const btn = $('#join-btn');
         btn.disabled = true;
-
         try {
             const data = await api('/api/join', {
                 method: 'POST',
-                body: JSON.stringify({
-                    fullName: $('#join-name').value.trim(),
-                    studentNumber: $('#join-sid').value.trim(),
-                    nickname: $('#join-nick')?.value?.trim() || ''
-                })
+                body: JSON.stringify({ fullName, studentNumber, nickname: $('#join-nick').value.trim() })
             });
-
             if (data.success) {
                 enterGame();
+            } else if (data.error === 'join.error.studentId.length' && requiredLen > 0) {
+                setAlert(err, 'error', t('join.error.studentId.lengthN', requiredLen));
             } else {
-                showError($('#join-error'), data.error || 'Failed to join');
+                setAlert(err, 'error', tErr(data.error));
             }
-        } catch (err) {
-            showError($('#join-error'), 'Network error. Please try again.');
+        } catch (_) {
+            setAlert(err, 'error', t('error.network'));
         } finally {
             btn.disabled = false;
         }
     });
 
-    function showError(el, msg) {
-        el.textContent = msg;
-        show(el);
-    }
+    /* ── Status ────────────────────────────────────── */
 
-    /* ── Enter game (after join or on reload with cookie) */
-
-    async function enterGame() {
+    function enterGame() {
         showScreen('waiting');
-        connectSSE();
-        await refreshStatus();
+        if (!stream) connectStream();
+        refreshStatus();
     }
 
-    /* ── Status polling & rendering ────────────────── */
-
+    /** Re-fetch the full state; calls that arrive while one is running are coalesced. */
     async function refreshStatus() {
+        if (refreshing) { refreshAgain = true; return; }
+        refreshing = true;
         try {
-            const status = await api('/api/status');
-            if (status.error === 'not_joined') {
-                showScreen('join');
-                return;
-            }
-            renderStatus(status);
-        } catch (e) {
-            // will retry via SSE reconnect
+            const s = await api('/api/status');
+            if (s._status === 401) { stopStream(); showScreen('join'); return; }
+            if (s._status === 403) { stopStream(); showScreen('kicked'); return; }
+            if (s._status !== 200) return;
+            status = s;
+            render(s);
+        } catch (_) {
+            // offline – the stream reconnect will trigger another refresh
+        } finally {
+            refreshing = false;
+            if (refreshAgain) { refreshAgain = false; refreshStatus(); }
         }
     }
 
-    function renderStatus(s) {
-        if (s.roundStatus === 'WAITING' || !s.roundStatus) {
-            showScreen('waiting');
-            $('#waiting-count').textContent = s.participantCount + ' participants connected';
-            return;
-        }
+    function render(s) {
+        $('#player-name').textContent = s.displayName || s.playerName || '';
+        startTimer(s);
 
-        if (s.roundStatus === 'OPEN') {
-            showScreen('game');
-            renderGameScreen(s);
-            return;
-        }
-
-        if (s.roundStatus === 'CLOSED') {
-            showScreen('closed');
-            renderClosedScreen(s);
-            return;
-        }
-
-        if (s.roundStatus === 'REVEALED') {
-            showScreen('revealed');
-            renderRevealedScreen(s);
-            return;
+        switch (s.roundStatus) {
+            case 'OPEN':
+                showScreen('game');
+                renderGame(s);
+                break;
+            case 'CLOSED':
+                showScreen('closed');
+                $('#closed-score').innerHTML = scoreHtml(s);
+                renderSubmissions($('#closed-submissions'), s, false);
+                break;
+            case 'REVEALED':
+                showScreen('revealed');
+                renderRevealed(s);
+                break;
+            default:
+                showScreen('waiting');
+                $('#waiting-count').textContent = participantsText(s.participantCount);
         }
     }
 
-    function renderGameScreen(s) {
-        $('#score-display').textContent = s.killed + ' / ' + s.totalMutants + ' mutants killed';
-        $('#tests-remaining').textContent = s.testsRemaining < 0
-            ? 'Unlimited tests'
-            : s.testsRemaining + ' tests left';
+    function scoreHtml(s) {
+        return `<span class="score-num">${s.killed} / ${s.totalMutants}</span>` +
+               `<span class="score-label">${esc(t('test.score.label'))}</span>`;
+    }
 
-        if (s.specification) {
-            $('#spec-content').innerHTML = s.specification;
-        }
+    function participantsText(n) {
+        return n === 1 ? t('waiting.participants.one') : t('waiting.participants', n);
+    }
+
+    function remainingText(n) {
+        if (n < 0) return t('test.remaining.unlimited');
+        if (n === 0) return t('test.remaining.none');
+        if (n === 1) return t('test.remaining.one');
+        return t('test.remaining', n);
+    }
+
+    function renderGame(s) {
+        $('#round-name').textContent = s.roundName || '';
+        $('#score-display').textContent = t('test.score', s.killed, s.totalMutants);
+        $('#tests-remaining').textContent = remainingText(s.testsRemaining);
+        $('#tests-remaining').classList.toggle('badge-warn', s.testsRemaining >= 0 && s.testsRemaining <= 2);
+        $('#spec-content').innerHTML = s.specification || '';   // trusted, from the server's Problem class
 
         renderInputFields(s.functionInputFields, s.expectedField);
-        renderSubmissions(s.submissions, false);
+        renderSubmissions($('#submissions'), s, false);
 
-        if (s.testsRemaining === 0) {
-            $('#submit-btn').disabled = true;
-            $('#submit-btn').textContent = 'No tests remaining';
-        } else {
-            $('#submit-btn').disabled = false;
-            $('#submit-btn').textContent = 'Submit Test';
-        }
+        const btn = $('#submit-btn');
+        const noneLeft = s.testsRemaining === 0;
+        btn.disabled = noneLeft;
+        btn.textContent = noneLeft ? t('test.remaining.none') : t('test.submit');
     }
 
-    let fieldsRendered = false;
+    /* ── Test form ─────────────────────────────────── */
+
     function renderInputFields(fields, expectedField) {
-        if (fieldsRendered) return;
-        fieldsRendered = true;
+        if (!fields || !expectedField) return;
+        const all = [...fields, expectedField];
+        const key = all.map(f => f.id).join('|');
+        if (key === fieldsKey) return;   // keep what the student is typing
+        fieldsKey = key;
+
         const container = $('#input-fields');
         container.innerHTML = '';
-
-        if (!fields) return;
-        const allFields = [...fields, expectedField];
-        allFields.forEach(f => {
+        all.forEach((f, i) => {
+            const isList = f.id === 'list';
+            const isLast = i === all.length - 1;
             const div = document.createElement('div');
             div.className = 'field';
-            const labelKey = f.label || f.id;
-            const placeholderKey = f.placeholder || '';
             div.innerHTML = `
-                <label for="field-${f.id}">${labelKey}</label>
-                <input id="field-${f.id}" name="${f.id}" type="text"
-                       inputmode="${f.inputMode || 'text'}"
-                       placeholder="${placeholderKey}" autocomplete="off"/>
-            `;
+                <label for="field-${esc(f.id)}">${esc(t(f.label))}</label>
+                <div class="input-with-keys">
+                    <input id="field-${esc(f.id)}" name="${esc(f.id)}" type="text"
+                           inputmode="${esc(f.inputMode || 'text')}" autocomplete="off" autocorrect="off"
+                           autocapitalize="off" spellcheck="false" maxlength="${isList ? 300 : 12}"
+                           enterkeyhint="${isLast ? 'send' : 'next'}"
+                           placeholder="${esc(t(f.placeholder))}"/>
+                    <button type="button" class="key-btn" data-insert="-" data-for="field-${esc(f.id)}"
+                            aria-label="${esc(t('test.key.minus'))}">−</button>
+                    ${isList ? `<button type="button" class="key-btn" data-insert="," data-for="field-${esc(f.id)}"
+                            aria-label="${esc(t('test.key.comma'))}">,</button>` : ''}
+                </div>`;
             container.appendChild(div);
         });
-    }
 
-    function renderSubmissions(subs, showMutants) {
-        if (!subs) return;
-        const container = currentScreen === 'game' ? $('#submissions')
-            : currentScreen === 'closed' ? $('#closed-submissions')
-            : $('#revealed-submissions');
-        container.innerHTML = '';
-
-        subs.slice().reverse().forEach((sub, idx) => {
-            const card = document.createElement('div');
-            card.className = 'sub-card ' + (sub.validity === 'VALID' ? 'valid' : 'invalid');
-            let html = `
-                <div class="sub-header">
-                    <span class="sub-inputs">list=[${sub.list}] target=${sub.target} expected=${sub.expected}</span>
-                    <span class="sub-validity ${sub.validity === 'VALID' ? 'valid-text' : 'invalid-text'}">${sub.validity}</span>
-                </div>`;
-
-            if (showMutants && sub.mutantResults) {
-                html += '<div class="sub-mutants">';
-                sub.mutantResults.forEach(mr => {
-                    html += `<span class="mutant-chip ${mr.killed ? 'killed' : 'survived'}">${mr.mutantId} ${mr.killed ? '✓' : '✗'}</span>`;
-                });
-                html += '</div>';
-            }
-            card.innerHTML = html;
-            container.appendChild(card);
+        // iOS number pads have no minus sign / comma: insert them at the cursor
+        container.querySelectorAll('.key-btn').forEach(b => {
+            b.addEventListener('pointerdown', e => e.preventDefault());   // keep keyboard open
+            b.addEventListener('click', () => insertAtCursor($('#' + b.dataset.for), b.dataset.insert));
         });
+        // Enter jumps to the next field, submits on the last one
+        const inputs = [...container.querySelectorAll('input')];
+        inputs.forEach((inp, i) => inp.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && i < inputs.length - 1) { e.preventDefault(); inputs[i + 1].focus(); }
+        }));
     }
 
-    function renderClosedScreen(s) {
-        $('#closed-score').textContent = s.killed + ' / ' + s.totalMutants;
-        renderSubmissions(s.submissions, false);
+    function insertAtCursor(input, text) {
+        const start = input.selectionStart ?? input.value.length;
+        const end = input.selectionEnd ?? input.value.length;
+        input.value = input.value.slice(0, start) + text + input.value.slice(end);
+        input.focus();
+        input.setSelectionRange(start + text.length, start + text.length);
     }
-
-    function renderRevealedScreen(s) {
-        $('#revealed-score').textContent = s.killed + ' / ' + s.totalMutants;
-
-        if (s.mutantInfos) {
-            const legend = $('#mutant-legend');
-            legend.innerHTML = '<h3>Mutants</h3>';
-            s.mutantInfos.forEach(m => {
-                legend.innerHTML += `
-                    <div class="mutant-legend-item">
-                        <strong>${m.id}: ${m.shortName}</strong>
-                        <p>${m.description}</p>
-                    </div>`;
-            });
-        }
-
-        renderSubmissions(s.submissions, true);
-    }
-
-    /* ── Submit test ───────────────────────────────── */
 
     $('#test-form').addEventListener('submit', async e => {
         e.preventDefault();
-        hide($('#submit-error'));
+        const fb = $('#submit-feedback');
+        hide(fb);
         const btn = $('#submit-btn');
+        if (btn.disabled) return;
         btn.disabled = true;
+        btn.textContent = t('test.submitting');
 
         const body = {};
         const inputs = $('#input-fields').querySelectorAll('input');
         inputs.forEach(inp => { body[inp.name] = inp.value.trim(); });
 
         try {
-            const res = await api('/api/submit', {
-                method: 'POST',
-                body: JSON.stringify(body)
-            });
-
-            if (res.success === false && res.message) {
-                showError($('#submit-error'), res.message);
-            } else if (res.validity) {
-                if (res.message) {
-                    showError($('#submit-error'), res.message);
-                    $('#submit-error').className = 'alert alert-warn';
+            const res = await api('/api/submit', { method: 'POST', body: JSON.stringify(body) });
+            if (res._status === 401 || res._status === 403) { refreshStatus(); return; }
+            if (res.success) {
+                if (res.validity === 'INVALID') {
+                    setAlert(fb, 'warn', '✗ ' + t('test.result.invalid') + ' – ' + tErr(res.message));
+                } else {
+                    setAlert(fb, 'success', '✓ ' + t('test.result.valid.message', res.killed, res.totalMutants));
                 }
-                $('#score-display').textContent = res.killed + ' / ' + res.totalMutants + ' mutants killed';
-                $('#tests-remaining').textContent = res.testsRemaining < 0
-                    ? 'Unlimited tests' : res.testsRemaining + ' tests left';
-
-                if (res.testsRemaining === 0) {
-                    btn.disabled = true;
-                    btn.textContent = 'No tests remaining';
-                }
-
-                inputs.forEach(inp => inp.value = '');
-                await refreshStatus();
+                inputs.forEach(inp => { inp.value = ''; });
+                if (navigator.vibrate) navigator.vibrate(30);
+            } else {
+                setAlert(fb, 'error', tErr(res.message || res.error));
             }
-        } catch (err) {
-            showError($('#submit-error'), 'Network error');
+        } catch (_) {
+            setAlert(fb, 'error', t('error.network'));
         } finally {
-            if ($('#submit-btn').textContent !== 'No tests remaining') {
-                btn.disabled = false;
-            }
+            btn.disabled = false;
+            btn.textContent = t('test.submit');
+            await refreshStatus();
         }
     });
 
-    /* ── SSE ───────────────────────────────────────── */
+    /* ── Submissions ───────────────────────────────── */
 
-    function connectSSE() {
-        if (sse) { sse.close(); }
-        sse = new EventSource('/sse/student');
-
-        sse.addEventListener('round-state', () => {
-            fieldsRendered = false;
-            refreshStatus();
-        });
-        sse.addEventListener('score-update', () => refreshStatus());
-        sse.addEventListener('heartbeat', () => {});
-
-        sse.onerror = () => {
-            setTimeout(() => {
-                if (currentScreen !== 'join') connectSSE();
-            }, 3000);
-        };
+    function renderSubmissions(container, s, revealed) {
+        const subs = s.submissions || [];
+        if (subs.length === 0) {
+            container.innerHTML = `<p class="muted small">${esc(t('test.history.empty'))}</p>`;
+            return;
+        }
+        container.innerHTML = subs.slice().reverse().map((sub, idx) => {
+            const n = subs.length - idx;
+            const valid = sub.validity === 'VALID';
+            let detail = '';
+            if (revealed) {
+                if (!valid) {
+                    detail = `<div class="sub-detail">${esc(t('reveal.test.invalid', sub.referenceResult))}</div>`;
+                } else if (sub.mutantResults) {
+                    detail = '<div class="sub-mutants">' + sub.mutantResults.map(mr =>
+                        `<span class="mutant-chip ${mr.killed ? 'killed' : 'survived'}"
+                               title="${esc(t(mr.killed ? 'reveal.chip.killed' : 'reveal.chip.survived'))}">
+                            ${esc(mr.mutantId)} ${mr.killed ? '✓' : '✗'}</span>`).join('') + '</div>';
+                }
+            }
+            return `
+                <div class="sub-card ${valid ? 'valid' : 'invalid'}">
+                    <div class="sub-header">
+                        <span class="sub-num">#${n}</span>
+                        <code class="sub-inputs">indexOf([${esc(sub.list)}], ${esc(sub.target)}) → ${esc(sub.expected)}</code>
+                        <span class="sub-validity ${valid ? 'valid-text' : 'invalid-text'}">${esc(t(valid ? 'test.result.valid' : 'test.result.invalid'))}</span>
+                    </div>${detail}
+                </div>`;
+        }).join('');
     }
 
-    /* ── Init: check if already joined ──────────────── */
+    function renderRevealed(s) {
+        $('#revealed-score').innerHTML = scoreHtml(s);
+        renderSubmissions($('#revealed-submissions'), s, true);
+
+        const killedByMe = new Set();
+        (s.submissions || []).forEach(sub => (sub.mutantResults || [])
+            .forEach(mr => { if (mr.killed) killedByMe.add(mr.mutantId); }));
+
+        $('#mutant-legend').innerHTML = (s.mutantInfos || []).map(m => {
+            const mine = killedByMe.has(m.id);
+            return `
+                <div class="mutant-legend-item ${mine ? 'killed' : 'survived'}">
+                    <div class="mutant-legend-head">
+                        <strong>${esc(m.id)}: ${esc(m.shortName)}</strong>
+                        <span class="mutant-chip ${mine ? 'killed' : 'survived'}">
+                            ${esc(t(mine ? 'reveal.mutants.killedByYou' : 'reveal.mutants.survived'))}</span>
+                    </div>
+                    <p>${esc(m.description)}</p>
+                    ${m.code ? `<pre class="code">${esc(m.code)}</pre>` : ''}
+                </div>`;
+        }).join('');
+        $('#reference-code').textContent = s.referenceCode || '';
+    }
+
+    /* ── Timer ─────────────────────────────────────── */
+
+    function startTimer(s) {
+        clearInterval(timerInterval);
+        const el = $('#timer-display');
+        if (s.roundStatus !== 'OPEN' || s.remainingMs == null) { hide(el); return; }
+        const deadline = Date.now() + s.remainingMs;   // server-relative, immune to phone clock skew
+        show(el);
+        const tick = () => {
+            const left = deadline - Date.now();
+            el.textContent = '⏱ ' + fmtClock(left);
+            el.classList.toggle('badge-warn', left < 30000);
+            if (left <= 0) clearInterval(timerInterval);
+        };
+        tick();
+        timerInterval = setInterval(tick, 500);
+    }
+
+    /* ── Live updates (SSE) ────────────────────────── */
+
+    function connectStream() {
+        stream = liveStream('/sse/student', {
+            'round-state': () => refreshStatus(),
+            'settings-changed': () => refreshStatus(),
+            'session-changed': () => refreshStatus(),
+            'participants': d => {
+                if (currentScreen === 'waiting') $('#waiting-count').textContent = participantsText(d.count);
+            },
+            'kicked': () => { stopStream(); showScreen('kicked'); }
+        }, refreshStatus, ok => (ok ? hide : show)($('#conn-banner')));
+    }
+
+    function stopStream() {
+        if (stream) { stream.close(); stream = null; }
+        hide($('#conn-banner'));
+    }
+
+    // Safety net for networks that silently drop the event stream: re-sync now and then.
+    setInterval(() => { if (stream && currentScreen !== 'join') refreshStatus(); }, 30000);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && stream) refreshStatus();
+    });
+
+    /* ── Init: already joined (cookie)? ────────────── */
 
     (async () => {
         try {
-            const status = await api('/api/status');
-            if (status.error === 'not_joined') {
-                showScreen('join');
-            } else {
-                enterGame();
-            }
-        } catch (e) {
+            const s = await api('/api/status');
+            if (s._status === 200) { connectStream(); status = s; render(s); }
+            else if (s._status === 403) showScreen('kicked');
+            else showScreen('join');
+        } catch (_) {
             showScreen('join');
         }
     })();
-
 })();

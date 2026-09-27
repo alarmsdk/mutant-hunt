@@ -2,106 +2,136 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
 <head>
     <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
-    <title>Mutant Hunt</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+    <meta name="theme-color" content="#0f172a"/>
+    <title th:text="#{app.title}">Mutant Hunt</title>
     <link rel="stylesheet" th:href="@{/css/style.css}"/>
 </head>
 <body class="student-body">
-<div id="app">
+<header class="student-header">
+    <span class="logo-sm">🧬 <span th:text="#{app.title}">Mutant Hunt</span></span>
+    <span id="player-name" class="player-name"></span>
+</header>
+<div id="conn-banner" class="conn-banner" style="display:none" th:text="#{common.connection.lost}"></div>
 
-    <!-- JOIN SCREEN -->
-    <div id="join-screen" class="screen">
+<main id="app">
+
+    <!-- JOIN -->
+    <section id="join-screen" class="screen" style="display:none">
         <div class="card">
-            <h1 class="logo">🧬 Mutant Hunt</h1>
-            <p class="subtitle">SENG 403 – Software Testing Game</p>
-            <div id="join-no-session" class="alert alert-warn" style="display:none">
-                No active session. Please wait for the instructor.
-            </div>
-            <form id="join-form" autocomplete="off">
+            <h1 class="logo" th:text="#{join.title}">Join the Game</h1>
+            <p class="subtitle" th:text="#{app.subtitle}"></p>
+            <div id="join-no-session" class="alert alert-warn" th:style="${hasSession ? 'display:none' : ''}"
+                 th:text="#{join.error.session.none}"></div>
+            <form id="join-form" autocomplete="off" novalidate>
                 <div class="field">
-                    <label for="join-name">Full Name</label>
-                    <input id="join-name" type="text" required placeholder="e.g. Jane Doe" autocomplete="name"/>
+                    <label for="join-name" th:text="#{join.name.label}">Full Name</label>
+                    <input id="join-name" type="text" required maxlength="80" autocomplete="name"
+                           enterkeyhint="next" th:placeholder="#{join.name.placeholder}"/>
                 </div>
                 <div class="field">
-                    <label for="join-sid">Student Number</label>
-                    <input id="join-sid" type="text" inputmode="numeric" required
-                           th:placeholder="${studentIdLength > 0 ? 'Must be ' + studentIdLength + ' digits' : 'e.g. 2021001234'}"
-                           pattern="\d+"/>
+                    <label for="join-sid" th:text="#{join.studentId.label}">Student Number</label>
+                    <input id="join-sid" type="text" inputmode="numeric" pattern="[0-9]*" required maxlength="20"
+                           enterkeyhint="next" th:attr="data-length=${studentIdLength}"
+                           th:placeholder="#{join.studentId.placeholder}"/>
                 </div>
                 <div class="field" id="nickname-field" th:style="${nicknameMode ? '' : 'display:none'}">
-                    <label for="join-nick">Nickname (shown on board)</label>
-                    <input id="join-nick" type="text" placeholder="Pick a nickname"/>
+                    <label for="join-nick" th:text="#{join.nickname.label}">Nickname</label>
+                    <input id="join-nick" type="text" maxlength="24" enterkeyhint="go"
+                           th:placeholder="#{join.nickname.placeholder}"/>
                 </div>
-                <div id="join-error" class="alert alert-error" style="display:none"></div>
-                <button type="submit" class="btn btn-primary btn-full" id="join-btn">Join</button>
+                <div id="join-error" class="alert alert-error" role="alert" style="display:none"></div>
+                <button type="submit" class="btn btn-primary btn-full" id="join-btn" th:text="#{join.button}">Join</button>
+                <p class="muted small" th:text="#{join.privacy}"></p>
             </form>
         </div>
-    </div>
+    </section>
 
-    <!-- WAITING SCREEN -->
-    <div id="waiting-screen" class="screen" style="display:none">
+    <!-- WAITING -->
+    <section id="waiting-screen" class="screen" style="display:none">
         <div class="card text-center">
             <div class="spinner"></div>
-            <h2>Get Ready</h2>
-            <p class="muted">Waiting for the next round…</p>
+            <h2 th:text="#{waiting.title}">Get Ready</h2>
+            <p class="muted" th:text="#{waiting.message}">Waiting for the next round…</p>
             <p class="muted" id="waiting-count"></p>
         </div>
-    </div>
+    </section>
 
-    <!-- GAME SCREEN -->
-    <div id="game-screen" class="screen" style="display:none">
-        <div class="card">
-            <div class="score-bar">
-                <span id="score-display">0 / 7 mutants killed</span>
+    <!-- GAME (round OPEN) -->
+    <section id="game-screen" class="screen" style="display:none">
+        <div class="score-bar" id="score-bar">
+            <span id="score-display" class="score-main"></span>
+            <span class="score-side">
+                <span id="timer-display" class="badge badge-timer" style="display:none"></span>
                 <span id="tests-remaining" class="badge"></span>
-            </div>
+            </span>
+        </div>
 
+        <div class="card">
+            <h2 class="round-title" id="round-name"></h2>
             <details class="spec-details" open>
-                <summary><strong>Specification</strong></summary>
+                <summary th:text="#{test.spec.title}">Specification</summary>
                 <div id="spec-content" class="spec-box"></div>
             </details>
 
-            <form id="test-form" autocomplete="off">
+            <form id="test-form" autocomplete="off" novalidate>
                 <div id="input-fields"></div>
-                <div id="submit-error" class="alert alert-error" style="display:none"></div>
-                <button type="submit" class="btn btn-primary btn-full" id="submit-btn">Submit Test</button>
+                <div id="submit-feedback" class="alert" role="status" style="display:none"></div>
+                <button type="submit" class="btn btn-primary btn-full" id="submit-btn" th:text="#{test.submit}">Submit Test</button>
             </form>
-
-            <div id="submission-list">
-                <h3>Your Submissions</h3>
-                <div id="submissions"></div>
-            </div>
         </div>
-    </div>
 
-    <!-- CLOSED SCREEN -->
-    <div id="closed-screen" class="screen" style="display:none">
+        <div class="card">
+            <h3 th:text="#{test.history.title}">Your Tests</h3>
+            <div id="submissions"></div>
+        </div>
+    </section>
+
+    <!-- CLOSED -->
+    <section id="closed-screen" class="screen" style="display:none">
         <div class="card text-center">
-            <h2>Round Closed</h2>
-            <p class="muted">Waiting for the instructor to reveal results…</p>
-            <div class="score-bar-big">
-                <span id="closed-score">0 / 7</span>
-                <span>mutants killed</span>
-            </div>
+            <h2 th:text="#{closed.title}">Round Closed</h2>
+            <p class="muted" th:text="#{closed.message}"></p>
+            <div class="score-big" id="closed-score"></div>
+        </div>
+        <div class="card">
+            <h3 th:text="#{test.history.title}">Your Tests</h3>
             <div id="closed-submissions"></div>
         </div>
-    </div>
+    </section>
 
-    <!-- REVEALED SCREEN -->
-    <div id="revealed-screen" class="screen" style="display:none">
+    <!-- REVEALED -->
+    <section id="revealed-screen" class="screen" style="display:none">
+        <div class="card text-center">
+            <h2 th:text="#{reveal.title}">Results Revealed!</h2>
+            <div class="score-big" id="revealed-score"></div>
+        </div>
         <div class="card">
-            <h2>🎉 Results Revealed!</h2>
-            <div class="score-bar-big">
-                <span id="revealed-score">0 / 7</span>
-                <span>mutants killed</span>
-            </div>
-            <div id="mutant-legend"></div>
+            <h3 th:text="#{test.history.title}">Your Tests</h3>
             <div id="revealed-submissions"></div>
         </div>
-    </div>
+        <div class="card">
+            <h3 th:text="#{reveal.mutants.title}">The Mutants</h3>
+            <div id="mutant-legend"></div>
+            <details class="spec-details">
+                <summary th:text="#{reveal.reference.title}">Correct implementation</summary>
+                <pre class="code" id="reference-code"></pre>
+            </details>
+        </div>
+    </section>
 
-</div>
+    <!-- KICKED -->
+    <section id="kicked-screen" class="screen" style="display:none">
+        <div class="card text-center">
+            <h2 th:text="#{kicked.title}">Removed</h2>
+            <p class="muted" th:text="#{kicked.message}"></p>
+        </div>
+    </section>
 
+</main>
+
+<script th:inline="javascript">window.MSG = /*[[${messages}]]*/ {};</script>
+<script th:src="@{/js/i18n.js}"></script>
 <script th:src="@{/js/student.js}"></script>
 </body>
 </html>

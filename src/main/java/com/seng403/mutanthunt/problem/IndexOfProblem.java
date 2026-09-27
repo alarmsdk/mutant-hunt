@@ -86,7 +86,7 @@ public class IndexOfProblem implements Problem {
     @Override
     public List<InputFieldDef> getFunctionInputFields() {
         return List.of(
-            new InputFieldDef("list",   "test.list.label",   "test.list.placeholder",   "text"),
+            new InputFieldDef("list",   "test.list.label",   "test.list.placeholder",   "numeric"),
             new InputFieldDef("target", "test.target.label", "test.target.placeholder", "numeric")
         );
     }
