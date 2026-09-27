@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+    <title>Mutant Hunt</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body class="student-body">
+<div id="app">
+
+    <!-- JOIN SCREEN -->
+    <div id="join-screen" class="screen">
+        <div class="card">
+            <h1 class="logo">🧬 Mutant Hunt</h1>
+            <p class="subtitle">SENG 403 – Software Testing Game</p>
+            <div id="join-no-session" class="alert alert-warn" style="display:none">
+                No active session. Please wait for the instructor.
+            </div>
+            <form id="join-form" autocomplete="off">
+                <div class="field">
+                    <label for="join-name">Full Name</label>
+                    <input id="join-name" type="text" required placeholder="e.g. Jane Doe" autocomplete="name"/>
+                </div>
+                <div class="field">
+                    <label for="join-sid">Student Number</label>
+                    <input id="join-sid" type="text" inputmode="numeric" required
+                           th:placeholder="${studentIdLength > 0 ? 'Must be ' + studentIdLength + ' digits' : 'e.g. 2021001234'}"
+                           pattern="\d+"/>
+                </div>
+                <div class="field" id="nickname-field" th:style="${nicknameMode ? '' : 'display:none'}">
+                    <label for="join-nick">Nickname (shown on board)</label>
+                    <input id="join-nick" type="text" placeholder="Pick a nickname"/>
+                </div>
+                <div id="join-error" class="alert alert-error" style="display:none"></div>
+                <button type="submit" class="btn btn-primary btn-full" id="join-btn">Join</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- WAITING SCREEN -->
+    <div id="waiting-screen" class="screen" style="display:none">
+        <div class="card text-center">
+            <div class="spinner"></div>
+            <h2>Get Ready</h2>
+            <p class="muted">Waiting for the next round…</p>
+            <p class="muted" id="waiting-count"></p>
+        </div>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div id="game-screen" class="screen" style="display:none">
+        <div class="card">
+            <div class="score-bar">
+                <span id="score-display">0 / 7 mutants killed</span>
+                <span id="tests-remaining" class="badge"></span>
+            </div>
+
+            <details class="spec-details" open>
+                <summary><strong>Specification</strong></summary>
+                <div id="spec-content" class="spec-box"></div>
+            </details>
+
+            <form id="test-form" autocomplete="off">
+                <div id="input-fields"></div>
+                <div id="submit-error" class="alert alert-error" style="display:none"></div>
+                <button type="submit" class="btn btn-primary btn-full" id="submit-btn">Submit Test</button>
+            </form>
+
+            <div id="submission-list">
+                <h3>Your Submissions</h3>
+                <div id="submissions"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CLOSED SCREEN -->
+    <div id="closed-screen" class="screen" style="display:none">
+        <div class="card text-center">
+            <h2>Round Closed</h2>
+            <p class="muted">Waiting for the instructor to reveal results…</p>
+            <div class="score-bar-big">
+                <span id="closed-score">0 / 7</span>
+                <span>mutants killed</span>
+            </div>
+            <div id="closed-submissions"></div>
+        </div>
+    </div>
+
+    <!-- REVEALED SCREEN -->
+    <div id="revealed-screen" class="screen" style="display:none">
+        <div class="card">
+            <h2>🎉 Results Revealed!</h2>
+            <div class="score-bar-big">
+                <span id="revealed-score">0 / 7</span>
+                <span>mutants killed</span>
+            </div>
+            <div id="mutant-legend"></div>
+            <div id="revealed-submissions"></div>
+        </div>
+    </div>
+
+</div>
+
+<script th:src="@{/js/student.js}"></script>
+</body>
+</html>

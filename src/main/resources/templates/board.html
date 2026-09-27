@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Mutant Hunt – Board</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body class="board-body">
+<div id="board">
+
+    <!-- QR Section -->
+    <div id="qr-section" class="board-panel">
+        <h1 class="board-title">🧬 Mutant Hunt</h1>
+        <div class="qr-container">
+            <img id="qr-img" th:src="@{/api/qr?size=400}" alt="QR Code" width="400" height="400"/>
+            <p class="join-url" id="join-url" th:text="${joinUrl}"></p>
+        </div>
+        <div class="board-info">
+            <span id="board-participants" class="board-stat">0 participants</span>
+        </div>
+    </div>
+
+    <!-- Round Info -->
+    <div id="round-section" class="board-panel" style="display:none">
+        <div class="board-header">
+            <h2 id="round-name" class="board-round-name"></h2>
+            <div class="board-meta">
+                <span id="board-participant-count" class="board-stat"></span>
+                <span id="board-test-limit" class="board-stat"></span>
+                <span id="board-timer" class="board-stat timer" style="display:none"></span>
+            </div>
+        </div>
+
+        <!-- Spec -->
+        <div id="board-spec" class="board-spec"></div>
+
+        <!-- Scoreboard -->
+        <div class="board-scoreboard">
+            <h3>Scoreboard</h3>
+            <table id="scoreboard-table">
+                <thead>
+                    <tr><th>#</th><th>Name</th><th>Score</th><th>Tests</th></tr>
+                </thead>
+                <tbody id="scoreboard-body"></tbody>
+            </table>
+            <div id="scoreboard-more" class="more-label" style="display:none"></div>
+        </div>
+
+        <!-- Mutant Panel -->
+        <div id="mutant-panel" class="board-mutants" style="display:none">
+            <h3>Mutants</h3>
+            <div id="mutant-list"></div>
+        </div>
+    </div>
+
+    <!-- No-session message -->
+    <div id="no-session" class="board-panel text-center" style="display:none">
+        <h2>No active session</h2>
+    </div>
+
+</div>
+
+<script>
+    window.BOARD_DATA_URL = '/admin/api/board-data';
+</script>
+<script th:src="@{/js/board.js}"></script>
+</body>
+</html>

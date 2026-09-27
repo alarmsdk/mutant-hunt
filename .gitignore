@@ -1,0 +1,23 @@
+# Environment
+.env
+
+# Build
+target/
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.run/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# H2 data
+data/
+
+# Logs
+*.log

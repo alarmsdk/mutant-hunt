@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Mutant Hunt – Admin Login</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body class="student-body">
+<div class="screen">
+    <div class="card" style="max-width:400px;margin:auto">
+        <h1 class="logo">🔒 Admin Login</h1>
+        <div th:if="${param.error}" class="alert alert-error">Invalid password.</div>
+        <div th:if="${param.logout}" class="alert alert-info">Signed out.</div>
+        <div th:if="${param.blocked}" class="alert alert-error">Too many attempts. Try again later.</div>
+        <form th:action="@{/admin/login}" method="post" autocomplete="off">
+            <div class="field">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" required autofocus/>
+                <input type="hidden" name="username" value="admin"/>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

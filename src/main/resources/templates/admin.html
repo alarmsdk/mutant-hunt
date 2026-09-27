@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Mutant Hunt – Admin</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+    <meta name="_csrf" th:content="${_csrf.token}"/>
+    <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
+</head>
+<body class="admin-body">
+<header class="admin-header">
+    <h1>🧬 Mutant Hunt – Admin</h1>
+    <nav>
+        <button class="tab-btn active" data-tab="sessions">Sessions</button>
+        <button class="tab-btn" data-tab="rounds">Rounds</button>
+        <button class="tab-btn" data-tab="settings">Settings</button>
+        <button class="tab-btn" data-tab="participants">Participants</button>
+        <button class="tab-btn" data-tab="submissions">Submissions</button>
+        <button class="tab-btn" data-tab="analytics">Analytics</button>
+        <button class="tab-btn" data-tab="board-control">Board</button>
+        <a th:href="@{/admin/logout}" class="btn btn-sm btn-outline">Sign Out</a>
+    </nav>
+</header>
+
+<main class="admin-main">
+
+    <!-- SESSIONS TAB -->
+    <section id="tab-sessions" class="tab-panel">
+        <div class="panel-header">
+            <h2>Sessions</h2>
+            <div class="actions">
+                <input id="new-session-name" type="text" placeholder="Session name" class="input-sm"/>
+                <button id="create-session-btn" class="btn btn-primary btn-sm">New Session</button>
+            </div>
+        </div>
+        <table class="data-table">
+            <thead><tr><th>Name</th><th>Active</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody id="sessions-body"></tbody>
+        </table>
+    </section>
+
+    <!-- ROUNDS TAB -->
+    <section id="tab-rounds" class="tab-panel" style="display:none">
+        <div class="panel-header">
+            <h2>Rounds <span id="rounds-session-name" class="muted"></span></h2>
+            <div class="actions">
+                <input id="new-round-name" type="text" placeholder="Round name" class="input-sm"/>
+                <input id="new-round-limit" type="number" placeholder="Test limit (0=∞)" class="input-sm" style="width:130px"/>
+                <input id="new-round-time" type="number" placeholder="Time limit sec" class="input-sm" style="width:130px"/>
+                <button id="create-round-btn" class="btn btn-primary btn-sm">New Round</button>
+            </div>
+        </div>
+        <table class="data-table">
+            <thead><tr><th>Name</th><th>Problem</th><th>Limit</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="rounds-body"></tbody>
+        </table>
+    </section>
+
+    <!-- SETTINGS TAB -->
+    <section id="tab-settings" class="tab-panel" style="display:none">
+        <h2>Session Settings</h2>
+        <form id="settings-form" class="settings-grid">
+            <div class="field">
+                <label>Board anonymity mode</label>
+                <select id="set-anonymity">
+                    <option value="FULL_NAME">Full Name</option>
+                    <option value="NICKNAME">Nickname</option>
+                    <option value="ANONYMOUS">Anonymous (auto-generated)</option>
+                    <option value="NUMBER_MASKED">Masked Number</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Accept new participants</label>
+                <select id="set-joinOpen">
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Student ID required length (0 = any)</label>
+                <input id="set-studentIdLength" type="number" min="0" max="20"/>
+            </div>
+            <div class="field">
+                <label>Mutant panel on board</label>
+                <select id="set-mutantPanel">
+                    <option value="HIDDEN">Hidden</option>
+                    <option value="COUNT_ONLY">Kill count only</option>
+                    <option value="REVEALED">Full reveal</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Submission cooldown (ms)</label>
+                <input id="set-rateLimit" type="number" min="0" max="60000"/>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+            <div id="settings-msg" class="alert alert-info" style="display:none">Settings saved.</div>
+        </form>
+    </section>
+
+    <!-- PARTICIPANTS TAB -->
+    <section id="tab-participants" class="tab-panel" style="display:none">
+        <div class="panel-header">
+            <h2>Participants <span id="participant-count" class="badge"></span></h2>
+        </div>
+        <table class="data-table">
+            <thead><tr><th>Full Name</th><th>Student #</th><th>Display Name</th><th>Joined</th><th>Actions</th></tr></thead>
+            <tbody id="participants-body"></tbody>
+        </table>
+    </section>
+
+    <!-- SUBMISSIONS TAB -->
+    <section id="tab-submissions" class="tab-panel" style="display:none">
+        <div class="panel-header">
+            <h2>Submissions</h2>
+            <div class="actions">
+                <select id="sub-filter-round" class="input-sm"><option value="">All Rounds</option></select>
+                <select id="sub-filter-validity" class="input-sm">
+                    <option value="">All</option>
+                    <option value="VALID">VALID</option>
+                    <option value="INVALID">INVALID</option>
+                </select>
+            </div>
+        </div>
+        <div class="table-scroll">
+            <table class="data-table data-table-sm">
+                <thead><tr>
+                    <th>Time</th><th>Name</th><th>Student #</th>
+                    <th>list</th><th>target</th><th>expected</th>
+                    <th>Ref</th><th>Validity</th><th>Killed</th>
+                </tr></thead>
+                <tbody id="submissions-body"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ANALYTICS TAB -->
+    <section id="tab-analytics" class="tab-panel" style="display:none">
+        <div class="panel-header">
+            <h2>Analytics</h2>
+            <select id="analytics-round" class="input-sm"><option value="">Select round</option></select>
+        </div>
+        <div id="analytics-content" style="display:none">
+            <div class="analytics-stats">
+                <div class="stat-card"><div class="stat-value" id="an-total">0</div><div>Total Submissions</div></div>
+                <div class="stat-card"><div class="stat-value" id="an-invalid">0</div><div>Invalid Tests</div></div>
+                <div class="stat-card"><div class="stat-value" id="an-avg">0</div><div>Average Score</div></div>
+                <div class="stat-card"><div class="stat-value" id="an-participants">0</div><div>Participants</div></div>
+            </div>
+            <h3>Mutant Kill Rates</h3>
+            <table class="data-table">
+                <thead><tr><th>Mutant</th><th>Name</th><th>Killed By</th><th>Kill %</th><th>Bar</th></tr></thead>
+                <tbody id="analytics-mutants"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- BOARD CONTROL TAB -->
+    <section id="tab-board-control" class="tab-panel" style="display:none">
+        <h2>Board Control</h2>
+        <div class="button-group">
+            <button class="btn btn-lg" onclick="sendBoardCmd('SHOW_QR')">📷 Show QR Code</button>
+            <button class="btn btn-lg" onclick="sendBoardCmd('SHOW_SCOREBOARD')">📊 Show Scoreboard</button>
+            <button class="btn btn-lg" onclick="sendBoardCmd('FULLSCREEN_SCORE')">🖥️ Fullscreen Scores</button>
+        </div>
+        <h3 style="margin-top:2rem">Export</h3>
+        <div class="button-group">
+            <button class="btn btn-outline" id="export-participants-btn">📥 Participants CSV</button>
+            <button class="btn btn-outline" id="export-submissions-btn">📥 Submissions CSV</button>
+        </div>
+    </section>
+
+</main>
+
+<script th:src="@{/js/admin.js}"></script>
+</body>
+</html>
