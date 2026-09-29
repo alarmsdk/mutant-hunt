@@ -21,3 +21,6 @@ data/
 
 # Logs
 *.log
+
+# Claude/Cursor local
+.claude/

@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mutant Guide – indexOf</title>
+<meta name="description" content="SENG 403 Mutant Hunt: the seven mutants of indexOf explained, with RIPR analysis, killing tests and teaching notes (English / Türkçe).">
+<style>
+:root {
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --surface-2: #f2f0ea;
+  --text: #1d1f23;
+  --muted: #5d6169;
+  --line: #e2dfd6;
+  --accent: #0e7490;
+  --accent-soft: #e0f2f5;
+  --kill: #15803d;
+  --kill-soft: #dcfce7;
+  --live: #b42318;
+  --live-soft: #fde8e6;
+  --add-soft: #e6f6ea;
+  --del-soft: #fbe9e7;
+  --code-bg: #f5f3ee;
+  --tr: #7c3aed;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317;
+    --surface: #181b21;
+    --surface-2: #20242c;
+    --text: #e8e9ec;
+    --muted: #a0a6b1;
+    --line: #2d323c;
+    --accent: #38bdd8;
+    --accent-soft: #123039;
+    --kill: #4ade80;
+    --kill-soft: #14301f;
+    --live: #f87171;
+    --live-soft: #3a1c1c;
+    --add-soft: #16301f;
+    --del-soft: #3a1f1d;
+    --code-bg: #1c2027;
+    --tr: #b79cff;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111317; --surface: #181b21; --surface-2: #20242c; --text: #e8e9ec; --muted: #a0a6b1;
+  --line: #2d323c; --accent: #38bdd8; --accent-soft: #123039; --kill: #4ade80; --kill-soft: #14301f;
+  --live: #f87171; --live-soft: #3a1c1c; --add-soft: #16301f; --del-soft: #3a1f1d; --code-bg: #1c2027; --tr: #b79cff;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+code { font-size: .9em; background: var(--surface-2); padding: .08em .35em; border-radius: 4px; }
+a { color: var(--accent); }
+
+.page { max-width: 1120px; margin: 0 auto; padding: 0 16px 64px; }
+
+header.hero { padding: 40px 0 24px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.kicker { color: var(--accent); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; font-size: .78rem; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.5rem); line-height: 1.15; margin: .3rem 0 .4rem; }
+h1 .tr-title { display: block; color: var(--tr); font-size: .62em; font-weight: 600; margin-top: .25rem; }
+h2 { font-size: 1.45rem; margin: 48px 0 6px; line-height: 1.25; }
+h2 .tr-h, h3 .tr-h { color: var(--tr); font-weight: 600; }
+h2 .tr-h::before, h3 .tr-h::before { content: " / "; color: var(--muted); font-weight: 400; }
+h3 { font-size: 1.1rem; margin: 22px 0 6px; }
+
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px; }
+nav.toc a {
+  text-decoration: none; font-size: .85rem; font-weight: 600; color: var(--text);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: .25rem .7rem;
+}
+nav.toc a:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Side-by-side bilingual blocks ── */
+.bi { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
+.bi > .en, .bi > .tr { min-width: 0; }
+.bi > .tr { border-left: 2px solid var(--line); padding-left: 20px; }
+.bi p, .bi ul { margin: .45rem 0; }
+.bi ul { padding-left: 1.2rem; }
+.bi li { margin: .2rem 0; }
+.lang-tag {
+  display: inline-block; font-size: .66rem; font-weight: 800; letter-spacing: .08em;
+  color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 .35rem; margin-bottom: .2rem;
+}
+.tr .lang-tag { color: var(--tr); border-color: var(--tr); }
+.bi.first-only .lang-tag { display: inline-block; }
+.bi:not(.first-only) .lang-tag { display: none; }
+
+@media (max-width: 760px) {
+  .bi { grid-template-columns: 1fr; }
+  .bi > .tr { border-left: none; padding-left: 0; border-top: 1px dashed var(--line); margin-top: .4rem; padding-top: .4rem; }
+  .bi .lang-tag { display: inline-block !important; }
+}
+
+/* ── Cards, code, tables ── */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; margin: 18px 0; }
+.mutant-card { border-top: 4px solid var(--accent); scroll-margin-top: 16px; }
+.mutant-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .8rem; }
+.mutant-head .mid { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
+.mutant-head .mname { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 1.05rem; font-weight: 700; }
+.pill { font-size: .75rem; font-weight: 700; border-radius: 999px; padding: .1rem .6rem; background: var(--surface-2); color: var(--muted); }
+.pill.hard { background: var(--live-soft); color: var(--live); }
+.pill.easy { background: var(--kill-soft); color: var(--kill); }
+
+pre {
+  background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; margin: 12px 0; font-size: .86rem; line-height: 1.5; overflow-x: auto;
+}
+pre .del { display: block; background: var(--del-soft); margin: 0 -14px; padding: 0 14px; }
+pre .add { display: block; background: var(--add-soft); margin: 0 -14px; padding: 0 14px; }
+pre .cm { color: var(--muted); }
+
+.label { font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 16px 0 2px; }
+.label .tr-l { color: var(--tr); }
+.label .tr-l::before { content: " · "; color: var(--muted); }
+
+.table-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { padding: .5rem .65rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+th { background: var(--surface-2); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+th .tr-l { display: block; color: var(--tr); text-transform: none; letter-spacing: 0; font-weight: 600; }
+td.c { text-align: center; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: nowrap; }
+td.k { background: var(--kill-soft); color: var(--kill); font-weight: 800; }
+td.s { color: var(--muted); }
+td.inv { text-align: center; color: var(--live); font-weight: 700; background: var(--live-soft); }
+td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: nowrap; }
+
+.ripr { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0; }
+.ripr div { background: var(--surface-2); border-radius: 8px; padding: .5rem .6rem; font-size: .86rem; }
+.ripr b { display: block; color: var(--accent); font-size: .78rem; letter-spacing: .05em; }
+.ripr .tr { color: var(--tr); display: block; margin-top: .2rem; border: none; padding: 0; }
+@media (max-width: 760px) { .ripr { grid-template-columns: 1fr 1fr; } }
+
+.ask { border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: .6rem .9rem; margin: 12px 0 2px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); margin: 4px 0; }
+.sw { display: inline-block; width: .9em; height: .9em; border-radius: 3px; vertical-align: -.1em; margin-right: .3em; }
+
+figure { margin: 12px 0; }
+.cfg { display: grid; grid-template-columns: minmax(260px, 380px) 1fr; gap: 20px; align-items: center; }
+@media (max-width: 760px) { .cfg { grid-template-columns: 1fr; } }
+svg text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
+
+@media print {
+  body { background: #fff; }
+  .card { break-inside: avoid; }
+  nav.toc { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="hero">
+  <div class="kicker">SENG 403 · Mutant Hunt</div>
+  <h1>The Seven Mutants of <code>indexOf</code>
+    <span class="tr-title"><code>indexOf</code>'un Yedi Mutantı</span></h1>
+  <div class="bi first-only">
+    <div class="en"><span class="lang-tag">EN</span>
+      <p>An instructor's guide to the game: what each mutant changes, which tests expose it, why typical student tests miss it, and how each one leads into RIPR, coverage criteria and model-driven test design.</p>
+    </div>
+    <div class="tr"><span class="lang-tag">TR</span>
+      <p>Oyun için hoca kılavuzu: her mutantın neyi değiştirdiği, hangi testlerin onu ortaya çıkardığı, tipik öğrenci testlerinin onu neden kaçırdığı ve her birinin RIPR, kapsam kriterleri ve model tabanlı test tasarımına nasıl bağlandığı.</p>
+    </div>
+  </div>
+  <nav class="toc" aria-label="Contents">
+    <a href="#basics">Basics</a><a href="#reference">Reference</a><a href="#matrix">Kill matrix</a>
+    <a href="#m1">M1</a><a href="#m2">M2</a><a href="#m3">M3</a><a href="#m4">M4</a><a href="#m5">M5</a><a href="#m6">M6</a><a href="#m7">M7</a>
+    <a href="#coverage">Coverage ≠ detection</a><a href="#minimal">Minimal suite</a><a href="#lecture">Lecture flow</a>
+  </nav>
+</header>
+
+<!-- ═══════════════════ BASICS ═══════════════════ -->
+<h2 id="basics">Key ideas <span class="tr-h">Temel kavramlar</span></h2>
+<div class="bi">
+  <div class="en">
+    <p>A <b>mutant</b> is a copy of the correct program with one small, deliberate fault. A test <b>kills</b> a mutant when the mutant's output differs from the test's expected value (or the mutant throws). A mutant that no test kills <b>survives</b>.</p>
+    <p><b>Mutation score</b> = killed mutants ÷ non-equivalent mutants. None of the seven mutants here is equivalent: each one can be killed by some test.</p>
+    <p>Mutants stand in for real mistakes. If a test suite cannot tell the correct program from a slightly wrong one, it would not catch that mistake in real code either.</p>
+  </div>
+  <div class="tr">
+    <p><b>Mutant</b>, doğru programın içine bilerek tek bir küçük hata yerleştirilmiş bir kopyasıdır. Bir test, mutantın çıktısı testin beklenen değerinden farklıysa (ya da mutant exception fırlatırsa) o mutantı <b>öldürür</b>. Hiçbir testin öldüremediği mutant <b>hayatta kalır</b>.</p>
+    <p><b>Mutasyon skoru</b> = öldürülen mutantlar ÷ eşdeğer olmayan mutantlar. Buradaki yedi mutantın hiçbiri eşdeğer değildir; her birini öldüren bir test vardır.</p>
+    <p>Mutantlar gerçek hataların vekilidir. Bir test takımı doğru programı hafifçe yanlış olanından ayırt edemiyorsa, aynı hatayı gerçek kodda da yakalayamaz.</p>
+  </div>
+</div>
+
+<h3>The RIPR model <span class="tr-h">RIPR modeli</span></h3>
+<div class="bi">
+  <div class="en">
+    <p>For a test to reveal a fault, four things must happen in order:</p>
+    <ul>
+      <li><b>Reachability</b> – the faulty statement is executed.</li>
+      <li><b>Infection</b> – executing it produces a wrong internal state.</li>
+      <li><b>Propagation</b> – the wrong state reaches the output.</li>
+      <li><b>Revealability</b> – the test's oracle (the expected value) actually checks that output, and is correct.</li>
+    </ul>
+    <p>Every card below walks through these four steps for one mutant.</p>
+  </div>
+  <div class="tr">
+    <p>Bir testin bir hatayı ortaya çıkarması için sırasıyla dört şey olmalıdır:</p>
+    <ul>
+      <li><b>Erişim (Reachability)</b> – hatalı ifade çalıştırılır.</li>
+      <li><b>Bulaşma (Infection)</b> – çalıştırılması yanlış bir iç durum üretir.</li>
+      <li><b>Yayılma (Propagation)</b> – yanlış durum çıktıya ulaşır.</li>
+      <li><b>Görünürlük (Revealability)</b> – testin oracle'ı (beklenen değer) bu çıktıyı gerçekten kontrol eder ve doğrudur.</li>
+    </ul>
+    <p>Aşağıdaki her kart, bir mutant için bu dört adımı tek tek inceler.</p>
+  </div>
+</div>
+
+<h3>INVALID tests: the oracle problem <span class="tr-h">INVALID testler: oracle problemi</span></h3>
+<div class="bi">
+  <div class="en">
+    <p>Before running the mutants, the server runs the correct implementation. If the student's expected value is wrong, the test is <b>INVALID</b> and earns nothing: <i>"Your expected value is wrong – your oracle failed!"</i></p>
+    <p>This is the R in RIPR failing on the test side. A test with a wrong oracle cannot reveal anything, however clever its inputs. Typical cause: guessing 1-based indices, or forgetting that the <i>first</i> occurrence is required.</p>
+  </div>
+  <div class="tr">
+    <p>Sunucu mutantları çalıştırmadan önce doğru implementasyonu çalıştırır. Öğrencinin beklenen değeri yanlışsa test <b>INVALID</b> sayılır ve puan getirmez: <i>"Your expected value is wrong – your oracle failed!"</i></p>
+    <p>Bu, RIPR'daki son R'nin test tarafında başarısız olmasıdır. Oracle'ı yanlış olan bir test, girdileri ne kadar zekice seçilmiş olursa olsun hiçbir şeyi ortaya çıkaramaz. Tipik neden: index'leri 1'den başlatmak ya da <i>ilk</i> eşleşmenin istendiğini unutmak.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════ REFERENCE ═══════════════════ -->
+<h2 id="reference">The reference implementation <span class="tr-h">Doğru implementasyon</span></h2>
+<pre><span class="cm">/** Returns the index of the first occurrence of target in list, or -1 if target is not present. */</span>
+int indexOf(List&lt;Integer&gt; list, int target) {
+    for (int i = 0; i &lt; list.size(); i++) {
+        if (list.get(i) == target) return i;   <span class="cm">// target is an int → Integer is unboxed, values are compared</span>
+    }
+    return -1;
+}</pre>
+
+<!-- ═══════════════════ MATRIX ═══════════════════ -->
+<h2 id="matrix">Kill matrix <span class="tr-h">Öldürme matrisi</span></h2>
+<div class="bi">
+  <div class="en"><p>The acceptance tests from the specification. Each cell shows what the mutant returns; a green cell means the mutant is killed (its result differs from the expected value).</p></div>
+  <div class="tr"><p>Spesifikasyondaki kabul testleri. Her hücre mutantın döndürdüğü değeri gösterir; yeşil hücre mutantın öldürüldüğü (sonucunun beklenen değerden farklı olduğu) anlamına gelir.</p></div>
+</div>
+<div class="legend">
+  <span><span class="sw" style="background:var(--kill-soft);border:1px solid var(--kill)"></span>killed · öldürüldü</span>
+  <span><span class="sw" style="background:var(--surface);border:1px solid var(--line)"></span>survived · hayatta kaldı</span>
+</div>
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    <th>list</th><th>target</th><th>expected<span class="tr-l">beklenen</span></th>
+    <th>M1</th><th>M2</th><th>M3</th><th>M4</th><th>M5</th><th>M6</th><th>M7</th>
+    <th>Killed<span class="tr-l">Öldürülen</span></th>
+  </tr></thead>
+  <tbody>
+    <tr><td class="mono">[5]</td><td class="c">5</td><td class="c">0</td>
+      <td class="c k">-1</td><td class="c k">-1</td><td class="c s">0</td><td class="c k">1</td><td class="c s">0</td><td class="c s">0</td><td class="c s">0</td><td>M1, M2, M4</td></tr>
+    <tr><td class="mono">[]</td><td class="c">3</td><td class="c">-1</td>
+      <td class="c s">-1</td><td class="c s">-1</td><td class="c s">-1</td><td class="c s">-1</td><td class="c k">0</td><td class="c s">-1</td><td class="c s">-1</td><td>M5</td></tr>
+    <tr><td class="mono">[1,2,2]</td><td class="c">2</td><td class="c">1</td>
+      <td class="c s">1</td><td class="c s">1</td><td class="c k">2</td><td class="c k">2</td><td class="c s">1</td><td class="c s">1</td><td class="c s">1</td><td>M3, M4</td></tr>
+    <tr><td class="mono">[9,4]</td><td class="c">4</td><td class="c">1</td>
+      <td class="c s">1</td><td class="c k">-1</td><td class="c s">1</td><td class="c k">2</td><td class="c s">1</td><td class="c k">0</td><td class="c s">1</td><td>M2, M4, M6</td></tr>
+    <tr><td class="mono">[1000]</td><td class="c">1000</td><td class="c">0</td>
+      <td class="c k">-1</td><td class="c k">-1</td><td class="c s">0</td><td class="c k">1</td><td class="c s">0</td><td class="c s">0</td><td class="c k">-1</td><td>M1, M2, M4, M7</td></tr>
+    <tr><td class="mono">[1,2,3]</td><td class="c">5</td><td class="c">-1</td>
+      <td class="c s">-1</td><td class="c s">-1</td><td class="c s">-1</td><td class="c s">-1</td><td class="c k">0</td><td class="c s">-1</td><td class="c s">-1</td><td>M5</td></tr>
+    <tr><td class="mono">[5]</td><td class="c">5</td><td class="c">1</td>
+      <td class="inv" colspan="7">INVALID – correct answer is 0 · doğru cevap 0; mutants are not run · mutantlar çalıştırılmaz</td><td>—</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    <th>Mutant</th><th>Change<span class="tr-l">Değişiklik</span></th>
+    <th>Smallest killing test<span class="tr-l">En basit öldüren test</span></th>
+    <th>Why students miss it<span class="tr-l">Öğrenciler neden kaçırır</span></th>
+  </tr></thead>
+  <tbody>
+    <tr><td><a href="#m1">M1</a> start-at-one</td><td><code>i = 1</code></td><td class="mono">[5], 5 → 0</td><td>Rarely missed · nadiren kaçırılır</td></tr>
+    <tr><td><a href="#m2">M2</a> skip-last</td><td><code>i &lt; size-1</code></td><td class="mono">[5], 5 → 0</td><td>Target never placed last · hedef hiç sona konmaz</td></tr>
+    <tr><td><a href="#m3">M3</a> last-occurrence</td><td>last match · son eşleşme</td><td class="mono">[2,2], 2 → 0</td><td>No duplicates · tekrar eden değer yok</td></tr>
+    <tr><td><a href="#m4">M4</a> index-plus-one</td><td><code>return i + 1</code></td><td class="mono">[5], 5 → 0</td><td>Almost never · neredeyse hiç</td></tr>
+    <tr><td><a href="#m5">M5</a> zero-not-found</td><td><code>return 0</code></td><td class="mono">[], 3 → -1</td><td>Only "found" tests · yalnızca "bulunan" testler</td></tr>
+    <tr><td><a href="#m6">M6</a> greater-equal</td><td><code>&gt;=</code></td><td class="mono">[7], 3 → -1</td><td>Sorted lists · sıralı listeler</td></tr>
+    <tr><td><a href="#m7">M7</a> reference-equality</td><td><code>Integer ==</code></td><td class="mono">[1000], 1000 → 0</td><td>Only small numbers · yalnızca küçük sayılar</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ═══════════════════ M1 ═══════════════════ -->
+<section class="card mutant-card" id="m1">
+  <div class="mutant-head"><span class="mid">M1</span><span class="mname">start-at-one</span><span class="pill">off-by-one · bir fazla/eksik</span></div>
+  <pre><span class="del">-   for (int i = 0; i &lt; list.size(); i++) {</span><span class="add">+   for (int i = 1; i &lt; list.size(); i++) {</span></pre>
+
+  <div class="label">What goes wrong <span class="tr-l">Ne bozuluyor</span></div>
+  <div class="bi">
+    <div class="en"><p>The first element is never examined. If the target is only at index 0, the mutant returns -1. If it is at index 0 <i>and</i> later, it returns the later index.</p></div>
+    <div class="tr"><p>İlk eleman hiç incelenmez. Hedef yalnızca 0. index'teyse mutant -1 döndürür. Hem 0. index'te <i>hem de</i> sonrasında varsa, sonraki index'i döndürür.</p></div>
+  </div>
+
+  <div class="label">Survives when <span class="tr-l">Ne zaman hayatta kalır</span></div>
+  <div class="bi">
+    <div class="en"><p>The target is absent, or its first occurrence is not at index 0: <code>[1,2,2], 2 → 1</code>, <code>[9,4], 4 → 1</code>.</p></div>
+    <div class="tr"><p>Hedef listede yoksa ya da ilk geçtiği yer 0. index değilse: <code>[1,2,2], 2 → 1</code>, <code>[9,4], 4 → 1</code>.</p></div>
+  </div>
+
+  <div class="label">Killed by <span class="tr-l">Öldüren testler</span></div>
+  <p><code>[5], 5 → 0</code> (M1 returns -1) · <code>[1000,1000], 1000 → 0</code> (M1 returns 1)</p>
+
+  <div class="ripr">
+    <div><b>R</b>Always: the loop start runs on every call.<span class="tr">Her zaman: döngü başlangıcı her çağrıda çalışır.</span></div>
+    <div><b>I</b>Always: <code>i</code> starts with the wrong value.<span class="tr">Her zaman: <code>i</code> yanlış değerle başlar.</span></div>
+    <div><b>P</b>Only if the answer depends on index 0.<span class="tr">Yalnızca cevap 0. index'e bağlıysa.</span></div>
+    <div><b>R</b>The oracle must expect 0.<span class="tr">Oracle 0 beklemeli.</span></div>
+  </div>
+
+  <div class="label">Teaching point <span class="tr-l">Ders notu</span></div>
+  <div class="bi">
+    <div class="en"><p>The textbook example of <b>infection without propagation</b>: for <code>[3], 5 → -1</code> the state is wrong from the first instruction (<code>i = 1</code>), yet the output is still the correct -1. Executing faulty code is not the same as detecting it.</p></div>
+    <div class="tr"><p><b>Yayılmadan bulaşmanın</b> ders kitabı örneği: <code>[3], 5 → -1</code> testinde durum ilk komuttan itibaren yanlıştır (<code>i = 1</code>), ama çıktı yine de doğru olan -1'dir. Hatalı kodu çalıştırmak, hatayı yakalamakla aynı şey değildir.</p></div>
+  </div>
+  <div class="ask bi">
+    <div class="en"><b>Ask the class:</b> "Test <code>[3], 5 → -1</code> executed the buggy line. Why didn't it fail?"</div>
+    <div class="tr"><b>Sınıfa sorun:</b> "<code>[3], 5 → -1</code> testi hatalı satırı çalıştırdı. Neden başarısız olmadı?"</div>
+  </div>
+</section>
+
+<!-- ═══════════════════ M2 ═══════════════════ -->
+<section class="card mutant-card" id="m2">
+  <div class="mutant-head"><span class="mid">M2</span><span class="mname">skip-last</span><span class="pill">off-by-one · bir fazla/eksik</span></div>
+  <pre><span class="del">-   for (int i = 0; i &lt; list.size(); i++) {</span><span class="add">+   for (int i = 0; i &lt; list.size() - 1; i++) {</span></pre>
+
+  <div class="label">What goes wrong <span class="tr-l">Ne bozuluyor</span></div>
+  <div class="bi">
+    <div class="en"><p>The last element is never examined. A target that first appears in the last position is reported as missing (-1). A one-element list is never searched at all.</p></div>
+    <div class="tr"><p>Son eleman hiç incelenmez. İlk kez son konumda geçen bir hedef bulunamamış gibi raporlanır (-1). Tek elemanlı bir listede hiç arama yapılmaz.</p></div>
+  </div>
+
+  <div class="label">Survives when <span class="tr-l">Ne zaman hayatta kalır</span></div>
+  <div class="bi">
+    <div class="en"><p>The first occurrence is before the last position, or the target is absent: <code>[1,2,2], 2 → 1</code> (the match at index 1 is found before the skipped last element).</p></div>
+    <div class="tr"><p>İlk eşleşme son konumdan önceyse ya da hedef listede yoksa: <code>[1,2,2], 2 → 1</code> (1. index'teki eşleşme, atlanan son elemandan önce bulunur).</p></div>
+  </div>
+
+  <div class="label">Killed by <span class="tr-l">Öldüren testler</span></div>
+  <p><code>[5], 5 → 0</code> · <code>[9,4], 4 → 1</code> · <code>[1,2], 2 → 1</code> (M2 returns -1 in each)</p>
+
+  <div class="ripr">
+    <div><b>R</b>Always: the loop condition runs on every call.<span class="tr">Her zaman: döngü koşulu her çağrıda çalışır.</span></div>
+    <div><b>I</b>Only when <code>i</code> reaches <code>size-1</code>: the condition turns false one step early.<span class="tr">Yalnızca <code>i</code> <code>size-1</code>'e ulaşınca: koşul bir adım erken false olur.</span></div>
+    <div><b>P</b>Only if the skipped element is the first match.<span class="tr">Yalnızca atlanan eleman ilk eşleşmeyse.</span></div>
+    <div><b>R</b>The oracle must expect that last index.<span class="tr">Oracle o son index'i beklemeli.</span></div>
+  </div>
+
+  <div class="label">Teaching point <span class="tr-l">Ders notu</span></div>
+  <div class="bi">
+    <div class="en"><p><b>Boundary values</b> of a position: first, last, only element. Students test "somewhere in the middle" and never the last slot. M1 and M2 together show why both ends of a range need a test.</p></div>
+    <div class="tr"><p>Bir konumun <b>sınır değerleri</b>: ilk, son ve tek eleman. Öğrenciler "ortalarda bir yerde" test eder, son konumu hiç denemez. M1 ve M2 birlikte, bir aralığın neden iki ucunun da test edilmesi gerektiğini gösterir.</p></div>
+  </div>
+  <div class="ask bi">
+    <div class="en"><b>Ask the class:</b> "Which single test kills both M1 and M2?" (a one-element list containing the target)</div>
+    <div class="tr"><b>Sınıfa sorun:</b> "Hem M1'i hem M2'yi tek başına öldüren test hangisi?" (hedefi içeren tek elemanlı bir liste)</div>
+  </div>
+</section>
+
+<!-- ═══════════════════ M3 ═══════════════════ -->
+<section class="card mutant-card" id="m3">
+  <div class="mutant-head"><span class="mid">M3</span><span class="mname">last-occurrence</span><span class="pill hard">often survives · sık hayatta kalır</span></div>
+  <pre>    int result = -1;
+    for (int i = 0; i &lt; list.size(); i++) {
+<span class="del">-       if (list.get(i) == target) return i;</span><span class="add">+       if (list.get(i) == target) result = i;   <span class="cm">// keeps looping</span></span>    }
+<span class="del">-   return -1;</span><span class="add">+   return result;</span></pre>
+
+  <div class="label">What goes wrong <span class="tr-l">Ne bozuluyor</span></div>
+  <div class="bi">
+    <div class="en"><p>The loop does not stop at the first match; it remembers the <i>last</i> one. This is <code>lastIndexOf</code>, a real and common confusion.</p></div>
+    <div class="tr"><p>Döngü ilk eşleşmede durmaz; <i>son</i> eşleşmeyi hatırlar. Bu aslında <code>lastIndexOf</code>'tur ve gerçek hayatta sık yapılan bir karışıklıktır.</p></div>
+  </div>
+
+  <div class="label">Survives when <span class="tr-l">Ne zaman hayatta kalır</span></div>
+  <div class="bi">
+    <div class="en"><p>The target occurs at most once. With no duplicates, "first" and "last" occurrence are the same index, so every test without duplicates lets M3 live.</p></div>
+    <div class="tr"><p>Hedef en fazla bir kez geçiyorsa. Tekrar yoksa "ilk" ve "son" eşleşme aynı index'tir; bu yüzden tekrar içermeyen her test M3'ü hayatta bırakır.</p></div>
+  </div>
+
+  <div class="label">Killed by <span class="tr-l">Öldüren testler</span></div>
+  <p><code>[1,2,2], 2 → 1</code> (M3 returns 2) · <code>[2,2], 2 → 0</code> (M3 returns 1)</p>
+
+  <div class="ripr">
+    <div><b>R</b>Whenever the loop runs.<span class="tr">Döngü her çalıştığında.</span></div>
+    <div><b>I</b>Once the first match is found: the method should have returned but keeps going.<span class="tr">İlk eşleşme bulunduğunda: metot dönmeliydi ama devam eder.</span></div>
+    <div><b>P</b>Only if a <i>second</i> match overwrites <code>result</code>.<span class="tr">Yalnızca <i>ikinci</i> bir eşleşme <code>result</code>'ı ezerse.</span></div>
+    <div><b>R</b>The oracle must say "first", not "last".<span class="tr">Oracle "son"u değil "ilk"i beklemeli.</span></div>
+  </div>
+
+  <div class="label">Teaching point <span class="tr-l">Ders notu</span></div>
+  <div class="bi">
+    <div class="en"><p><b>Read the specification.</b> The word "first" in the contract describes a whole input class: lists with duplicates. <b>Input space partitioning</b> would list it as a characteristic ("number of occurrences of target: 0 / 1 / more than 1"); structural coverage never will.</p></div>
+    <div class="tr"><p><b>Spesifikasyonu okuyun.</b> Sözleşmedeki "ilk" kelimesi başlı başına bir girdi sınıfını tarif eder: tekrar içeren listeler. <b>Girdi uzayı bölümleme</b> bunu bir özellik olarak listeler ("hedefin geçme sayısı: 0 / 1 / 1'den fazla"); yapısal kapsam ise asla listelemez.</p></div>
+  </div>
+  <div class="ask bi">
+    <div class="en"><b>Ask the class:</b> "Which word of the specification did M3 ignore, and did any of your tests check it?"</div>
+    <div class="tr"><b>Sınıfa sorun:</b> "M3 spesifikasyondaki hangi kelimeyi görmezden geldi ve testlerinizden herhangi biri bunu kontrol etti mi?"</div>
+  </div>
+</section>
+
+<!-- ═══════════════════ M4 ═══════════════════ -->
+<section class="card mutant-card" id="m4">
+  <div class="mutant-head"><span class="mid">M4</span><span class="mname">index-plus-one</span><span class="pill easy">easy · kolay</span></div>
+  <pre><span class="del">-       if (list.get(i) == target) return i;</span><span class="add">+       if (list.get(i) == target) return i + 1;</span></pre>
+
+  <div class="label">What goes wrong <span class="tr-l">Ne bozuluyor</span></div>
+  <div class="bi">
+    <div class="en"><p>The mutant reports a 1-based position instead of a 0-based index. It is correct only when the target is absent.</p></div>
+    <div class="tr"><p>Mutant, 0'dan başlayan index yerine 1'den başlayan konum döndürür. Yalnızca hedef listede yokken doğru sonuç verir.</p></div>
+  </div>
+
+  <div class="label">Survives when <span class="tr-l">Ne zaman hayatta kalır</span></div>
+  <div class="bi">
+    <div class="en"><p>Only when every test expects -1 (target absent).</p></div>
+    <div class="tr"><p>Yalnızca tüm testler -1 bekliyorsa (hedef listede yoksa).</p></div>
+  </div>
+
+  <div class="label">Killed by <span class="tr-l">Öldüren testler</span></div>
+  <p>Any valid test where the target is present · Hedefin bulunduğu her geçerli test: <code>[5], 5 → 0</code>, <code>[9,4], 4 → 1</code>, …</p>
+
+  <div class="ripr">
+    <div><b>R</b>When a match is found.<span class="tr">Eşleşme bulunduğunda.</span></div>
+    <div><b>I</b>Always, as soon as it is reached.<span class="tr">Erişildiği anda her zaman.</span></div>
+    <div><b>P</b>Always: the wrong value is returned directly.<span class="tr">Her zaman: yanlış değer doğrudan döndürülür.</span></div>
+    <div><b>R</b>Any correct oracle catches it.<span class="tr">Doğru olan her oracle yakalar.</span></div>
+  </div>
+
+  <div class="label">Teaching point <span class="tr-l">Ders notu</span></div>
+  <div class="bi">
+    <div class="en"><p>Mutants differ a lot in difficulty. M4 is killed by nearly every test, so "I killed M4" says almost nothing about test quality. A high mutation score built on easy mutants can hide a weak suite. Note that a student who believes indices start at 1 writes an INVALID test here instead of killing M4: the wrong oracle and the mutant make the <i>same</i> mistake.</p></div>
+    <div class="tr"><p>Mutantların zorlukları çok farklıdır. M4'ü neredeyse her test öldürür; bu yüzden "M4'ü öldürdüm" demek test kalitesi hakkında hemen hiçbir şey söylemez. Kolay mutantlarla elde edilen yüksek bir mutasyon skoru, zayıf bir test takımını gizleyebilir. Ayrıca index'lerin 1'den başladığını düşünen öğrenci burada M4'ü öldürmek yerine INVALID bir test yazar: yanlış oracle ile mutant <i>aynı</i> hatayı yapar.</p></div>
+  </div>
+  <div class="ask bi">
+    <div class="en"><b>Ask the class:</b> "If your oracle had the same bug as the mutant, could your test ever kill it?"</div>
+    <div class="tr"><b>Sınıfa sorun:</b> "Oracle'ınız mutantla aynı hatayı taşısaydı, testiniz onu öldürebilir miydi?"</div>
+  </div>
+</section>
+
+<!-- ═══════════════════ M5 ═══════════════════ -->
+<section class="card mutant-card" id="m5">
+  <div class="mutant-head"><span class="mid">M5</span><span class="mname">zero-not-found</span><span class="pill">wrong constant · yanlış sabit</span></div>
+  <pre>    for (int i = 0; i &lt; list.size(); i++) { … }
+<span class="del">-   return -1;</span><span class="add">+   return 0;</span></pre>
+
+  <div class="label">What goes wrong <span class="tr-l">Ne bozuluyor</span></div>
+  <div class="bi">
+    <div class="en"><p>"Not found" is reported as 0, which is indistinguishable from "found at index 0". A caller would silently use the first element.</p></div>
+    <div class="tr"><p>"Bulunamadı" durumu 0 olarak raporlanır; bu da "0. index'te bulundu"dan ayırt edilemez. Çağıran kod farkında olmadan ilk elemanı kullanır.</p></div>
+  </div>
+
+  <div class="label">Survives when <span class="tr-l">Ne zaman hayatta kalır</span></div>
+  <div class="bi">
+    <div class="en"><p>Every test contains the target. Students tend to test only the "happy path" where something is found.</p></div>
+    <div class="tr"><p>Tüm testlerde hedef listede varsa. Öğrenciler genelde yalnızca bir şeyin bulunduğu "mutlu yolu" test eder.</p></div>
+  </div>
+
+  <div class="label">Killed by <span class="tr-l">Öldüren testler</span></div>
+  <p><code>[], 3 → -1</code> · <code>[1,2,3], 5 → -1</code> (M5 returns 0)</p>
+
+  <div class="ripr">
+    <div><b>R</b>Only when the loop finishes without a match.<span class="tr">Yalnızca döngü eşleşme bulmadan bittiğinde.</span></div>
+    <div><b>I</b>Always, once reached.<span class="tr">Erişildiği anda her zaman.</span></div>
+    <div><b>P</b>Always: it is the return value.<span class="tr">Her zaman: doğrudan dönüş değeridir.</span></div>
+    <div><b>R</b>The oracle must expect -1.<span class="tr">Oracle -1 beklemeli.</span></div>
+  </div>
+
+  <div class="label">Teaching point <span class="tr-l">Ders notu</span></div>
+  <div class="bi">
+    <div class="en"><p>Here the difficulty is entirely <b>reachability</b>: the faulty statement only runs on the "not found" path. <b>Negative tests</b> and the <b>empty input</b> are cheap and powerful. The empty list is also the only input that skips the loop body entirely.</p></div>
+    <div class="tr"><p>Buradaki zorluk tamamen <b>erişimdir</b>: hatalı ifade yalnızca "bulunamadı" yolunda çalışır. <b>Negatif testler</b> ve <b>boş girdi</b> ucuz ama güçlüdür. Boş liste aynı zamanda döngü gövdesini tamamen atlayan tek girdidir.</p></div>
+  </div>
+  <div class="ask bi">
+    <div class="en"><b>Ask the class:</b> "How many of your tests expected -1? How many used an empty list?"</div>
+    <div class="tr"><b>Sınıfa sorun:</b> "Testlerinizin kaçı -1 bekliyordu? Kaçında boş liste kullandınız?"</div>
+  </div>
+</section>
+
+<!-- ═══════════════════ M6 ═══════════════════ -->
+<section class="card mutant-card" id="m6">
+  <div class="mutant-head"><span class="mid">M6</span><span class="mname">greater-equal</span><span class="pill hard">often survives · sık hayatta kalır</span></div>
+  <pre><span class="del">-       if (list.get(i) == target) return i;</span><span class="add">+       if (list.get(i) &gt;= target) return i;</span></pre>
+
+  <div class="label">What goes wrong <span class="tr-l">Ne bozuluyor</span></div>
+  <div class="bi">
+    <div class="en"><p>The mutant returns the first element that is <i>greater than or equal to</i> the target. Any larger element before the real match (or anywhere, if the target is absent) is reported as the answer.</p></div>
+    <div class="tr"><p>Mutant, hedefe <i>eşit veya ondan büyük</i> ilk elemanı döndürür. Gerçek eşleşmeden önce gelen (ya da hedef yoksa listenin herhangi bir yerindeki) daha büyük bir eleman cevap olarak raporlanır.</p></div>
+  </div>
+
+  <div class="label">Survives when <span class="tr-l">Ne zaman hayatta kalır</span></div>
+  <div class="bi">
+    <div class="en"><p>No element before the first match is larger than the target. <b>Every ascending list lets M6 survive</b>: <code>[1,2,3], 5 → -1</code>, <code>[1,2,2], 2 → 1</code>. On sorted data, "first ≥ target" happens to equal "first = target".</p></div>
+    <div class="tr"><p>İlk eşleşmeden önce hedeften büyük bir eleman yoksa. <b>Küçükten büyüğe sıralı her liste M6'yı hayatta bırakır</b>: <code>[1,2,3], 5 → -1</code>, <code>[1,2,2], 2 → 1</code>. Sıralı veride "hedeften büyük veya eşit ilk eleman" tesadüfen "hedefe eşit ilk eleman" ile aynıdır.</p></div>
+  </div>
+
+  <div class="label">Killed by <span class="tr-l">Öldüren testler</span></div>
+  <p><code>[9,4], 4 → 1</code> (M6 returns 0) · <code>[7], 3 → -1</code> (M6 returns 0)</p>
+
+  <div class="ripr">
+    <div><b>R</b>Every comparison in a non-empty list.<span class="tr">Boş olmayan listede her karşılaştırma.</span></div>
+    <div><b>I</b>Only when an element is <i>greater</i> than the target (<code>==</code> false, <code>&gt;=</code> true).<span class="tr">Yalnızca bir eleman hedeften <i>büyükse</i> (<code>==</code> false, <code>&gt;=</code> true).</span></div>
+    <div><b>P</b>Immediately, provided it happens before the first real match.<span class="tr">Hemen, yeter ki gerçek eşleşmeden önce olsun.</span></div>
+    <div><b>R</b>The oracle must expect the real index or -1.<span class="tr">Oracle gerçek index'i ya da -1'i beklemeli.</span></div>
+  </div>
+
+  <div class="label">Teaching point <span class="tr-l">Ders notu</span></div>
+  <div class="bi">
+    <div class="en"><p>"Nice" examples are dangerous. Tidy, sorted inputs hide relational-operator faults, one of the most common mutation operators (<code>==</code> → <code>&gt;=</code>, <code>&lt;</code> → <code>&lt;=</code>). Choose inputs whose <i>order</i> matters: unsorted lists with larger values in front.</p></div>
+    <div class="tr"><p>"Düzgün" örnekler tehlikelidir. Derli toplu, sıralı girdiler ilişkisel operatör hatalarını gizler; bunlar en yaygın mutasyon operatörlerindendir (<code>==</code> → <code>&gt;=</code>, <code>&lt;</code> → <code>&lt;=</code>). <i>Sırası</i> önemli olan girdiler seçin: önünde daha büyük değerler olan sırasız listeler.</p></div>
+  </div>
+  <div class="ask bi">
+    <div class="en"><b>Ask the class:</b> "Were your lists sorted? Why would a sorted list never reveal <code>&gt;=</code>?"</div>
+    <div class="tr"><b>Sınıfa sorun:</b> "Listeleriniz sıralı mıydı? Sıralı bir liste neden <code>&gt;=</code> hatasını asla ortaya çıkarmaz?"</div>
+  </div>
+</section>
+
+<!-- ═══════════════════ M7 ═══════════════════ -->
+<section class="card mutant-card" id="m7">
+  <div class="mutant-head"><span class="mid">M7</span><span class="mname">reference-equality</span><span class="pill hard">usually the last survivor · genelde son hayatta kalan</span></div>
+  <pre><span class="del">-       if (list.get(i) == target) return i;          <span class="cm">// int target → values compared</span></span><span class="add">+       Integer t = target;
++       if (list.get(i) == t) return i;               <span class="cm">// Integer == Integer → references compared!</span></span></pre>
+
+  <div class="label">What goes wrong <span class="tr-l">Ne bozuluyor</span></div>
+  <div class="bi">
+    <div class="en"><p>Between two <code>Integer</code> objects, <code>==</code> asks "same object?", not "same value?". Autoboxing (<code>Integer.valueOf</code>) returns <b>cached</b> objects for −128…127, so small values happen to share one object and compare equal. For any other value there are two different objects, the match is never found, and the mutant returns -1.</p>
+      <p>The game simulates this rule explicitly ("equal <i>and</i> within −128…127") so the result does not depend on the JVM option <code>-XX:AutoBoxCacheMax</code>.</p></div>
+    <div class="tr"><p>İki <code>Integer</code> nesnesi arasında <code>==</code>, "aynı değer mi?" diye değil "aynı nesne mi?" diye sorar. Autoboxing (<code>Integer.valueOf</code>), −128…127 aralığı için <b>önbellekteki</b> nesneleri döndürür; bu yüzden küçük değerler tesadüfen aynı nesneyi paylaşır ve eşit görünür. Diğer tüm değerler için iki ayrı nesne oluşur, eşleşme hiç bulunmaz ve mutant -1 döndürür.</p>
+      <p>Oyun bu kuralı açıkça taklit eder ("eşit <i>ve</i> −128…127 aralığında"); böylece sonuç <code>-XX:AutoBoxCacheMax</code> JVM ayarına bağlı olmaz.</p></div>
+  </div>
+
+  <div class="label">Survives when <span class="tr-l">Ne zaman hayatta kalır</span></div>
+  <div class="bi">
+    <div class="en"><p>Every matched value is between −128 and 127, which covers nearly all "natural" test data (<code>[1,2,3]</code>, <code>[5]</code>, <code>[9,4]</code>).</p></div>
+    <div class="tr"><p>Eşleşen tüm değerler −128 ile 127 arasındaysa; bu da neredeyse tüm "doğal" test verisini kapsar (<code>[1,2,3]</code>, <code>[5]</code>, <code>[9,4]</code>).</p></div>
+  </div>
+
+  <div class="label">Killed by <span class="tr-l">Öldüren testler</span></div>
+  <p><code>[1000], 1000 → 0</code> · <code>[-129], -129 → 0</code> (M7 returns -1 in both)</p>
+
+  <div class="ripr">
+    <div><b>R</b>Every comparison.<span class="tr">Her karşılaştırma.</span></div>
+    <div><b>I</b>Only when the values are equal but outside −128…127.<span class="tr">Yalnızca değerler eşit ama −128…127 dışındaysa.</span></div>
+    <div><b>P</b>Always: the match is missed and -1 comes out.<span class="tr">Her zaman: eşleşme kaçırılır ve -1 döner.</span></div>
+    <div><b>R</b>The oracle must expect the index of that large value.<span class="tr">Oracle o büyük değerin index'ini beklemeli.</span></div>
+  </div>
+
+  <div class="label">Teaching point <span class="tr-l">Ders notu</span></div>
+  <div class="bi">
+    <div class="en"><p>An <b>invisible boundary</b> in the input domain: 127 vs 128 appears nowhere in the specification, only in the platform. Good tests probe the <i>value</i> domain (large, negative, extreme values such as <code>Integer.MAX_VALUE</code>), not just the list structure. It also shows why the real signature with <code>int target</code> is safe: the bug appears only when both sides are <code>Integer</code>.</p></div>
+    <div class="tr"><p>Girdi uzayında <b>görünmez bir sınır</b>: 127 ile 128 arasındaki fark spesifikasyonda hiç geçmez, yalnızca platformda vardır. İyi testler yalnızca liste yapısını değil, <i>değer</i> uzayını da yoklar (büyük, negatif, <code>Integer.MAX_VALUE</code> gibi uç değerler). Ayrıca <code>int target</code> kullanan gerçek imzanın neden güvenli olduğunu gösterir: hata yalnızca iki taraf da <code>Integer</code> olduğunda ortaya çıkar.</p></div>
+  </div>
+  <div class="ask bi">
+    <div class="en"><b>Ask the class:</b> "What was the largest number in any of your tests? Why does 128 behave differently from 127?"</div>
+    <div class="tr"><b>Sınıfa sorun:</b> "Testlerinizdeki en büyük sayı neydi? 128 neden 127'den farklı davranıyor?"</div>
+  </div>
+</section>
+
+<!-- ═══════════════════ COVERAGE ═══════════════════ -->
+<h2 id="coverage">Coverage is not detection <span class="tr-h">Kapsam, hata yakalamak değildir</span></h2>
+<div class="bi">
+  <div class="en"><p>Two suites that satisfy classic coverage criteria completely, yet kill only 4 of the 7 mutants. This is the bridge from Round 2 to Round 3.</p></div>
+  <div class="tr"><p>Klasik kapsam kriterlerini tamamen sağlayan ama 7 mutanttan yalnızca 4'ünü öldüren iki test takımı. Bu, Tur 2'den Tur 3'e geçişin köprüsüdür.</p></div>
+</div>
+
+<div class="cfg">
+  <figure>
+    <svg viewBox="0 0 360 290" width="100%" role="img" aria-label="Control flow graph of indexOf with nodes 1 to 6">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+      <g stroke="var(--muted)" stroke-width="1.6" fill="none" marker-end="url(#arr)">
+        <line x1="180" y1="48" x2="180" y2="82"/>
+        <line x1="180" y1="118" x2="180" y2="152"/>
+        <line x1="162" y1="100" x2="98" y2="100"/>
+        <line x1="198" y1="170" x2="262" y2="170"/>
+        <line x1="180" y1="188" x2="180" y2="222"/>
+        <path d="M162,240 C 110,240 110,128 164,110"/>
+      </g>
+      <g font-size="11" fill="var(--muted)">
+        <text x="186" y="140">T</text><text x="126" y="115">F</text>
+        <text x="226" y="163">T</text><text x="186" y="210">F</text>
+      </g>
+      <g stroke="var(--accent)" stroke-width="2" fill="var(--surface)">
+        <circle cx="180" cy="30" r="18"/><circle cx="180" cy="100" r="18"/><circle cx="180" cy="170" r="18"/>
+        <circle cx="280" cy="170" r="18"/><circle cx="180" cy="240" r="18"/><circle cx="80" cy="100" r="18"/>
+      </g>
+      <g font-size="14" font-weight="700" fill="var(--text)" text-anchor="middle">
+        <text x="180" y="35">1</text><text x="180" y="105">2</text><text x="180" y="175">3</text>
+        <text x="280" y="175">4</text><text x="180" y="245">5</text><text x="80" y="105">6</text>
+      </g>
+      <g font-size="11" fill="var(--text)">
+        <text x="204" y="34">i = 0</text>
+        <text x="104" y="90">i &lt; size</text>
+        <text x="50" y="138">return -1</text>
+        <text x="204" y="198">get(i)==target</text>
+        <text x="252" y="146">return i</text>
+        <text x="206" y="268">i++</text>
+      </g>
+    </svg>
+  </figure>
+  <div class="bi">
+    <div class="en">
+      <p><b>Nodes:</b> 1 <code>i = 0</code>, 2 <code>i &lt; size</code>, 3 <code>get(i) == target</code>, 4 <code>return i</code>, 5 <code>i++</code>, 6 <code>return -1</code>.</p>
+      <p><b>Edges:</b> 1→2, 2→3, 2→6, 3→4, 3→5, 5→2.</p>
+      <p><b>Edge pairs:</b> [1,2,3] [1,2,6] [2,3,4] [2,3,5] [3,5,2] [5,2,3] [5,2,6].</p>
+    </div>
+    <div class="tr">
+      <p><b>Düğümler:</b> 1 <code>i = 0</code>, 2 <code>i &lt; size</code>, 3 <code>get(i) == target</code>, 4 <code>return i</code>, 5 <code>i++</code>, 6 <code>return -1</code>.</p>
+      <p><b>Kenarlar:</b> 1→2, 2→3, 2→6, 3→4, 3→5, 5→2.</p>
+      <p><b>Kenar çiftleri:</b> [1,2,3] [1,2,6] [2,3,4] [2,3,5] [3,5,2] [5,2,3] [5,2,6].</p>
+    </div>
+  </div>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    <th>Suite<span class="tr-l">Test takımı</span></th><th>Tests<span class="tr-l">Testler</span></th>
+    <th>Criterion met<span class="tr-l">Sağlanan kriter</span></th><th>Killed<span class="tr-l">Öldürülen</span></th>
+    <th>Survivors<span class="tr-l">Hayatta kalan</span></th>
+  </tr></thead>
+  <tbody>
+    <tr><td>A</td><td class="mono">[5],5→0 · [1,2,3],5→-1</td><td>100% statement + branch<br><span style="color:var(--tr)">%100 ifade + dal</span></td><td><b>4/7</b> M1 M2 M4 M5</td><td>M3 M6 M7</td></tr>
+    <tr><td>B</td><td class="mono">[],5→-1 · [5],5→0<br>[1,5],5→1 · [1],5→-1</td><td>100% edge-pair<br><span style="color:var(--tr)">%100 kenar çifti</span></td><td><b>4/7</b> M1 M2 M4 M5</td><td>M3 M6 M7</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="bi">
+  <div class="en"><p>The three survivors are exactly the <b>data-dependent</b> faults. M3 needs duplicates, M6 needs a larger element in front, M7 needs a large value. None of these is a <i>path</i> through the graph, so no structural criterion demands them. Structural coverage tells you which code has been executed; input space partitioning and mutation analysis tell you which <i>situations</i> have been tried. Round 3 works best when students derive tests from the CFG <i>and</i> from the input domain (occurrences: 0 / 1 / many; position: first / middle / last; order: sorted / unsorted; magnitude: small / large / negative).</p></div>
+  <div class="tr"><p>Hayatta kalan üç mutant tam olarak <b>veriye bağlı</b> hatalardır. M3 tekrar eden değer, M6 önde daha büyük bir eleman, M7 büyük bir değer ister. Bunların hiçbiri grafikte bir <i>yol</i> değildir; bu yüzden hiçbir yapısal kriter onları talep etmez. Yapısal kapsam hangi kodun çalıştığını söyler; girdi uzayı bölümleme ve mutasyon analizi ise hangi <i>durumların</i> denendiğini söyler. Tur 3, öğrenciler testleri hem CFG'den <i>hem de</i> girdi uzayından türettiğinde en iyi sonucu verir (geçme sayısı: 0 / 1 / çok; konum: ilk / orta / son; sıra: sıralı / sırasız; büyüklük: küçük / büyük / negatif).</p></div>
+</div>
+
+<!-- ═══════════════════ MINIMAL ═══════════════════ -->
+<h2 id="minimal">The smallest adequate suite <span class="tr-h">En küçük yeterli test takımı</span></h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Test</th><th>M1</th><th>M2</th><th>M3</th><th>M4</th><th>M5</th><th>M6</th><th>M7</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">[1000,1000], 1000 → 0</td><td class="c k">1</td><td class="c s">0</td><td class="c k">1</td><td class="c k">1</td><td class="c s">0</td><td class="c s">0</td><td class="c k">-1</td></tr>
+    <tr><td class="mono">[9,4], 4 → 1</td><td class="c s">1</td><td class="c k">-1</td><td class="c s">1</td><td class="c k">2</td><td class="c s">1</td><td class="c k">0</td><td class="c s">1</td></tr>
+    <tr><td class="mono">[], 3 → -1</td><td class="c s">-1</td><td class="c s">-1</td><td class="c s">-1</td><td class="c s">-1</td><td class="c k">0</td><td class="c s">-1</td><td class="c s">-1</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="bi">
+  <div class="en">
+    <p><b>Three tests kill all seven mutants, and three is the minimum.</b> Why not two?</p>
+    <ul>
+      <li>M5 is only reachable when the target is absent, so one "not found" test is required. In a "not found" test, M1–M4 and M7 all return the correct -1.</li>
+      <li>M1–M4 and M7 therefore need "found" tests. A single found test cannot kill both M3 (needs a duplicate) and M1+M2 together (needs the first occurrence to be both first and last, i.e. a one-element list, which cannot contain a duplicate).</li>
+    </ul>
+    <p>So the Round 2 limit of four tests leaves room for one mistake. Great for a debrief: "Who reached 7/7 with 3 tests?"</p>
+  </div>
+  <div class="tr">
+    <p><b>Üç test yedi mutantın hepsini öldürür ve üç, mümkün olan en az sayıdır.</b> Neden iki olmaz?</p>
+    <ul>
+      <li>M5'e yalnızca hedef listede yokken erişilir; bu yüzden bir "bulunamadı" testi şarttır. "Bulunamadı" testinde M1–M4 ve M7'nin hepsi doğru sonuç olan -1'i döndürür.</li>
+      <li>Dolayısıyla M1–M4 ve M7 için "bulundu" testleri gerekir. Tek bir "bulundu" testi hem M3'ü (tekrar gerekir) hem de M1+M2'yi birlikte öldüremez. İkisi için ilk eşleşmenin hem ilk hem son konumda olması, yani tek elemanlı bir liste gerekir; tek elemanlı listede de tekrar olamaz.</li>
+    </ul>
+    <p>Yani Tur 2'deki dört test sınırı bir hataya yer bırakır. Tartışma için güzel bir soru: "Kim 3 testle 7/7 yaptı?"</p>
+  </div>
+</div>
+
+<!-- ═══════════════════ LECTURE ═══════════════════ -->
+<h2 id="lecture">Suggested lecture flow <span class="tr-h">Önerilen ders akışı</span></h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Round<span class="tr-l">Tur</span></th><th>Limit</th><th>Typical outcome<span class="tr-l">Tipik sonuç</span></th><th>Concept<span class="tr-l">Kavram</span></th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>10</td><td>Many tests, 3–5 kills; M3, M6, M7 survive; several INVALID tests.<br><span style="color:var(--tr)">Çok test, 3–5 öldürme; M3, M6, M7 hayatta kalır; birkaç INVALID test.</span></td><td>Oracle problem, RIPR<br><span style="color:var(--tr)">Oracle problemi, RIPR</span></td></tr>
+    <tr><td>2</td><td>4</td><td>Scarcity forces choices; a few reach 7/7.<br><span style="color:var(--tr)">Kısıt seçim yapmaya zorlar; birkaç kişi 7/7'ye ulaşır.</span></td><td>Boundary values, input space partitioning<br><span style="color:var(--tr)">Sınır değerler, girdi uzayı bölümleme</span></td></tr>
+    <tr><td>3</td><td>∞</td><td>Tests derived from the CFG and the input domain; ties broken by fewer tests.<br><span style="color:var(--tr)">CFG'den ve girdi uzayından türetilen testler; eşitlikte az test kazanır.</span></td><td>Edge-pair coverage, model-driven test design<br><span style="color:var(--tr)">Kenar çifti kapsamı, model tabanlı test tasarımı</span></td></tr>
+  </tbody>
+</table>
+</div>
+<div class="bi">
+  <div class="en"><p><b>Reveal timing:</b> keep each round CLOSED while you ask "why did 10 tests kill only 4 mutants?", then reveal. After reveal, students see which mutant each of their tests killed, plus these mutants' names, descriptions and code.</p></div>
+  <div class="tr"><p><b>Reveal zamanlaması:</b> Her turu, "10 test neden sadece 4 mutant öldürdü?" diye sorarken CLOSED durumunda tutun, sonra reveal edin. Reveal'dan sonra öğrenciler her testlerinin hangi mutantı öldürdüğünü, ayrıca mutantların adlarını, açıklamalarını ve kodlarını görür.</p></div>
+</div>
+
+<footer>
+  SENG 403 – Software Quality Assurance and Testing · Mutant Hunt · All mutant outputs in this guide were computed with the game's own implementation.
+  <br><span style="color:var(--tr)">Bu kılavuzdaki tüm mutant çıktıları oyunun kendi implementasyonu ile hesaplanmıştır.</span>
+</footer>
+
+</div>
+</body>
+</html>
